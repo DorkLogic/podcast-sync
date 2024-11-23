@@ -1,0 +1,12 @@
+# Webflow Configuration
+webflow:
+  api_token: "YOUR_API_TOKEN"
+  collection_id: "YOUR_COLLECTION_ID"
+
+# RSS Feed Configuration
+rss:
+  feed_url: "https://feeds.buzzsprout.com/2194438.rss"
+
+# API Configuration
+api:
+  webflow_base_url: "https://api.webflow.com/collections" 
