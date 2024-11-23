@@ -13,13 +13,27 @@ import html
 from bs4 import BeautifulSoup
 import base64
 from requests.exceptions import RequestException
+from pathlib import Path
+from media.download_episode import get_latest_episode_url, download_episode
+from media.transcribe_podcast import transcribe_audio_file
+from openai import OpenAI
+from ai.classifier import classify_episode_category
+from webflow.categories import get_categories
 
-# Configure logging
+# At the top of the file, after the imports, add:
+SCRIPT_DIR = Path(__file__).parent
+ROOT_DIR = SCRIPT_DIR.parent
+
+# Create debug directory if it doesn't exist
+debug_dir = ROOT_DIR / 'debug'
+debug_dir.mkdir(exist_ok=True)
+
+# Configure logging to write to both file and console
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('debug_log.txt'),
+        logging.FileHandler(debug_dir / 'debug_log.txt'),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -32,7 +46,8 @@ class PodcastSyncError(Exception):
 def load_config():
     """Load configuration from config.yaml"""
     try:
-        with open('config.yaml', 'r') as f:
+        config_path = ROOT_DIR / 'config.yaml'
+        with open(config_path, 'r') as f:
             return yaml.safe_load(f)
     except Exception as e:
         print(f"Error loading config: {e}")
@@ -78,8 +93,13 @@ def get_apple_podcast_link(episode_number: int) -> tuple[str, str]:
 
 def generate_slug(title: str) -> str:
     """Generate a URL-friendly slug from the episode title"""
-    # Remove episode number from start if present
+    # Extract episode number if present
+    episode_match = re.match(r'^(\d+)\.', title)
+    episode_num = episode_match.group(1) if episode_match else ''
+    
+    # Remove episode number from start if present (temporarily)
     title = re.sub(r'^\d+\.\s*', '', title)
+    
     # Convert to lowercase and remove special chars
     slug = title.lower()
     slug = re.sub(r'[^a-z0-9\s-]', '', slug)
@@ -87,7 +107,74 @@ def generate_slug(title: str) -> str:
     slug = re.sub(r'\s+', '-', slug)
     # Remove multiple consecutive hyphens
     slug = re.sub(r'-+', '-', slug)
+    
+    # Add episode prefix back
+    if episode_num:
+        return f'ep-{episode_num}-{slug.strip("-")}'
     return slug.strip('-')
+
+def create_episode_link(episode_number: int, feed_entries: list) -> str:
+    """
+    Create a link to a mentioned episode using its number
+    Returns full URL to the episode
+    """
+    # Find the episode in feed entries
+    for entry in feed_entries:
+        if entry.title.startswith(f"{episode_number}."):
+            slug = generate_slug(entry.title)
+            return f"https://www.marketmakeherpodcast.com/episode/{slug}"
+    return None
+
+def process_episode_mentions(description: str, feed_entries: list) -> str:
+    """
+    Process episode mentions in description and convert them to hyperlinks
+    and truncate everything after
+    """
+    # Pattern to match the Episodes mentioned section with HTML tags
+    mentions_pattern = r'(<b>Episodes mentioned:<br /></b>.*?</p>)'
+    
+    # Find the episodes mentioned section
+    match = re.search(mentions_pattern, description, flags=re.DOTALL)
+    if match:
+        # Get everything before the episodes section
+        content_before = description[:match.start()]
+        
+        episodes_section = match.group(1)
+        # Process the episodes to add hyperlinks
+        def replace_episodes(section_match):
+            episodes_text = section_match.group(1)
+            # Split on <br /> to get individual episodes
+            episodes = episodes_text.split('<br />')
+            
+            processed_episodes = []
+            for episode in episodes:
+                # Match episode number and title
+                ep_match = re.match(r'(\d+)\.\s*(.*?)(?:\xa0)?$', episode.strip())
+                if ep_match:
+                    episode_num = int(ep_match.group(1))
+                    episode_text = episode.strip()
+                    
+                    # Get the full URL for this episode
+                    episode_url = create_episode_link(episode_num, feed_entries)
+                    if episode_url:
+                        processed_episodes.append(f'<a href="{episode_url}">{episode_text}</a>')
+                    else:
+                        processed_episodes.append(episode_text)
+            
+            # Reconstruct the section with hyperlinks
+            return f'<b>Episodes mentioned:<br /></b>{("<br />".join(processed_episodes))}</p>'
+
+        # Process the episodes section
+        processed_section = re.sub(r'<b>Episodes mentioned:<br /></b>(.*?)</p>', 
+                                 replace_episodes, 
+                                 episodes_section, 
+                                 flags=re.DOTALL)
+        
+        # Return everything before plus the processed episodes section
+        return content_before + processed_section
+    
+    # If no episodes section found, return original description
+    return description
 
 def get_episode_number(title: str) -> int:
     """Extract episode number from title"""
@@ -210,25 +297,29 @@ def get_latest_episode() -> Dict:
         entry = feed.entries[0]  # Get latest episode
         episode_number = get_episode_number(entry.title)
         
-        # Format title to start with "Ep "
-        formatted_title = f"Ep {entry.title}" if not entry.title.startswith("Ep ") else entry.title
+        # Format title to use "Ep N:" format
+        title_without_number = re.sub(r'^\d+\.\s*', '', entry.title)
+        formatted_title = f"Ep {episode_number}: {title_without_number}" if episode_number else entry.title
         
         # Get Apple Podcast link
         apple_podcast_link = get_apple_podcast_link(episode_number) if episode_number else None
         
-        # Get Spotify link from content
-        content = entry.content[0].value if entry.content else entry.summary
+        # Get full content and process it
+        full_content = entry.content[0].value if entry.content else entry.summary
+        processed_content = process_episode_mentions(full_content, feed.entries)
+        
+        # Get Spotify link
         spotify_link = get_spotify_podcast_link(episode_number) if episode_number else None
         
         # Map RSS feed data to Webflow collection fields
         episode = {
             'fields': {
-                'name': formatted_title,  # Episode Title with "EP " prefix
+                'name': formatted_title,  # Episode Title with "Ep N:" format
                 'slug': generate_slug(entry.title),  # Episode Link (required)
                 'episode-number': episode_number,  # Episode - Number
                 'episode-description-excerpt': clean_html(entry.summary)[:73],  # Episode - Excerpt (required)
-                'description': entry.content[0].value if entry.content else entry.summary,  # Description
-                'episode-description': entry.content[0].value if entry.content else entry.summary,  # Episode - Episode Equity
+                'description': processed_content,  # Description
+                'episode-description': processed_content,  # Episode - Episode Equity
                 'episode-featured': True,  # Set featured to true for latest episode
                 'episode-color': config['default_episode_color'],  # Set default episode color from config
                 'episode-main-image': {
@@ -272,8 +363,8 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
     """
     Create and publish episode in Webflow collection
     """
-    # Use v2 API endpoint
-    create_url = f'https://api.webflow.com/v2/collections/{config["webflow"]["collection_id"]}/items'
+    # Use v2 API endpoint with updated collection_id reference
+    create_url = f'https://api.webflow.com/v2/collections/{config["webflow"]["episode_collection_id"]}/items'
     
     headers = {
         'accept': 'application/json',
@@ -289,13 +380,6 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
         # Rename goodpods link to match collection field
         if 'episode-goodpods-link' in episode['fields']:
             episode['fields']['episode-anchor-link'] = episode['fields'].pop('episode-goodpods-link')
-        
-        # Clean HTML from description fields
-        if 'description' in episode['fields']:
-            episode['fields']['description'] = clean_html(episode['fields']['description'])
-            
-        if 'episode-description' in episode['fields']:
-            episode['fields']['episode-description'] = clean_html(episode['fields']['episode-description'])
             
         # Valid fields from collection schema
         valid_fields = [
@@ -304,7 +388,8 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
             'episode-number',  # Episode - Number
             'episode-description-excerpt',  # Episode - Excerpt
             'description',  # Description
-            'episode-description',  # Episode - Episode Equity
+            'episode-transcript',  # Episode - Transcript
+            'episode-category',  # Episode - Category
             'episode-featured',  # Episode - Featured?
             'episode-color',  # Episode - Color
             'episode-main-image',  # Episode - Main Image
@@ -314,6 +399,7 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
             'episode-anchor-link',  # Episode - Goodpods Link
         ]
         
+        # Only include valid fields in the request
         episode['fields'] = {k: v for k, v in episode['fields'].items() 
                            if k in valid_fields}
         
@@ -348,6 +434,32 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
             logger.error(f"Request body sent: {json.dumps(request_body, indent=2)}")
         raise PodcastSyncError(f"Webflow API error: {str(e)}")
 
+def get_category_id(category_name: str, config: dict) -> str:
+    """Get category ID from category name"""
+    try:
+        # Get categories collection
+        url = f'https://api.webflow.com/v2/collections/{config["webflow"]["category_collection_id"]}/items'
+        
+        headers = {
+            'accept': 'application/json',
+            'authorization': f'Bearer {config["webflow"]["api_token"]}',
+            'accept-version': '2.0.0'
+        }
+        
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        # Find matching category
+        for item in response.json().get('items', []):
+            if item['fieldData'].get('name') == category_name:
+                return item['id']
+                
+        raise PodcastSyncError(f"Category not found: {category_name}")
+        
+    except Exception as e:
+        logger.error(f"Error getting category ID: {e}")
+        raise
+
 def main():
     """Create and publish the latest episode in Webflow"""
     try:
@@ -358,8 +470,50 @@ def main():
         episode = get_latest_episode()
         logger.info(f"Found episode: {episode['fields']['name']}")
         
+        # Download audio and get transcription
+        try:
+            # Download audio
+            episode_url, episode_title = get_latest_episode_url()
+            audio_dir = debug_dir / 'audio'
+            audio_dir.mkdir(exist_ok=True)
+            
+            clean_filename = f"ep-{episode_title.split('.')[0].split('-')[0].strip()}.mp3"
+            output_path = audio_dir / clean_filename
+            
+            logger.info(f"Downloading episode audio to {output_path}")
+            download_episode(episode_url, output_path)
+            logger.info("Audio download complete")
+
+            # Initialize OpenAI client and get transcription
+            logger.info("Starting audio transcription...")
+            client = OpenAI(api_key=config['openai']['api_key'])
+            transcript = transcribe_audio_file(client, str(output_path))
+            
+            # Add transcript to episode fields
+            episode['fields']['episode-transcript'] = transcript
+            logger.info("Transcription complete and added to episode fields")
+
+            # Get category names from Webflow
+            logger.info("Getting categories from Webflow...")
+            categories = get_categories(config)
+            
+            # Classify episode
+            logger.info("Classifying episode...")
+            category = classify_episode_category(transcript, categories, config)
+            logger.info(f"Episode classified as: {category}")
+            
+            # Get category ID and add to episode fields
+            category_id = get_category_id(category, config)
+            episode['fields']['episode-category'] = category_id
+            logger.info(f"Added category ID: {category_id}")
+
+        except Exception as e:
+            logger.error(f"Audio processing failed: {e}")
+            # Continue with episode creation even if audio processing fails
+        
         # Save REST call body for debugging
-        with open('test_rest.json', 'w', encoding='utf-8') as f:
+        debug_file = ROOT_DIR / 'test_rest.json'
+        with open(debug_file, 'w', encoding='utf-8') as f:
             json.dump(episode, f, indent=2)
             
         # Create and publish episode in Webflow

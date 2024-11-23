@@ -13,8 +13,8 @@ class DateTimeEncoder(json.JSONEncoder):
             return obj.isoformat()
         return super().default(obj)
 
-def dump_latest_episode():
-    """Fetch the RSS feed and dump the latest episode contents to a file"""
+def dump_rss_feed():
+    """Fetch the RSS feed and dump the entire contents to a file"""
     RSS_FEED_URL = "https://feeds.buzzsprout.com/2194438.rss"
     
     # Create debug directory if it doesn't exist
@@ -23,20 +23,14 @@ def dump_latest_episode():
     # Parse the feed
     feed = feedparser.parse(RSS_FEED_URL)
     
-    # Get just the first/latest entry
-    if feed.entries:
-        latest_episode = feed.entries[0]
-        
-        # Convert episode to a pretty-printed string
-        episode_dump = pformat(latest_episode, indent=2, width=120)
-        
-        # Write to file
-        with open('debug/latest_episode.txt', 'w', encoding='utf-8') as f:
-            f.write(episode_dump)
-        
-        print(f"Latest episode details have been written to debug/latest_episode.txt")
-    else:
-        print("No episodes found in feed")
+    # Convert the entire feed to a pretty-printed string
+    feed_dump = pformat(feed, indent=2, width=120)
+    
+    # Write to file
+    with open('debug/debug_rss.txt', 'w', encoding='utf-8') as f:
+        f.write(feed_dump)
+    
+    print(f"Complete RSS feed details have been written to debug/debug_rss.txt")
 
 if __name__ == "__main__":
-    dump_latest_episode() 
+    dump_rss_feed() 
