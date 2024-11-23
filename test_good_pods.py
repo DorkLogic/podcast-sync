@@ -6,6 +6,7 @@ import sys
 from bs4 import BeautifulSoup
 import json
 import re
+import os
 
 # Configure logging to handle Unicode
 logging.basicConfig(
@@ -43,14 +44,17 @@ def get_goodpods_page():
 
 def main():
     try:
+        # Create debug directory if it doesn't exist
+        os.makedirs('debug', exist_ok=True)
+        
         # Fetch the page content
         logger.info("Fetching Goodpods page content...")
         html_content = get_goodpods_page()
         
         # Save the raw HTML to a file for inspection
-        with open('goodpods_page.html', 'w', encoding='utf-8') as f:
+        with open('debug/goodpods_page.html', 'w', encoding='utf-8') as f:
             f.write(html_content)
-        logger.info("Raw HTML saved to goodpods_page.html")
+        logger.info("Raw HTML saved to debug/goodpods_page.html")
         
         # Parse with BeautifulSoup for initial inspection
         soup = BeautifulSoup(html_content, 'html.parser')

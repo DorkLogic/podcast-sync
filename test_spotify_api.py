@@ -4,6 +4,7 @@ import yaml
 import logging
 import base64
 from pprint import pprint
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,6 +44,9 @@ def test_spotify_api():
     config = load_config()
     show_id = "5mHdlBVJS7B51OHG93JEVI"
     
+    # Create debug directory if it doesn't exist
+    os.makedirs('debug', exist_ok=True)
+    
     try:
         # First get access token
         access_token = get_access_token(
@@ -63,7 +67,7 @@ def test_spotify_api():
         response.raise_for_status()
         
         # Save raw response
-        with open('spotify_episodes.json', 'w') as f:
+        with open('debug/spotify_episodes.json', 'w') as f:
             import json
             json.dump(response.json(), f, indent=2)
             
@@ -74,7 +78,7 @@ def test_spotify_api():
             print("\nLatest Episode:")
             print(f"Name: {first_episode.get('name')}")
             print(f"URL: {first_episode.get('external_urls', {}).get('spotify')}")
-            print(f"\nFull response saved to spotify_episodes.json")
+            print(f"\nFull response saved to debug/spotify_episodes.json")
         
     except Exception as e:
         logger.error(f"Error: {e}")

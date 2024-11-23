@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import Any
 from pprint import pformat
+import os
 
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle datetime objects"""
@@ -16,6 +17,9 @@ def dump_latest_episode():
     """Fetch the RSS feed and dump the latest episode contents to a file"""
     RSS_FEED_URL = "https://feeds.buzzsprout.com/2194438.rss"
     
+    # Create debug directory if it doesn't exist
+    os.makedirs('debug', exist_ok=True)
+    
     # Parse the feed
     feed = feedparser.parse(RSS_FEED_URL)
     
@@ -27,10 +31,10 @@ def dump_latest_episode():
         episode_dump = pformat(latest_episode, indent=2, width=120)
         
         # Write to file
-        with open('latest_episode.txt', 'w', encoding='utf-8') as f:
+        with open('debug/latest_episode.txt', 'w', encoding='utf-8') as f:
             f.write(episode_dump)
         
-        print(f"Latest episode details have been written to latest_episode.txt")
+        print(f"Latest episode details have been written to debug/latest_episode.txt")
     else:
         print("No episodes found in feed")
 

@@ -4,6 +4,7 @@ import json
 import yaml
 import logging
 import sys
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -26,6 +27,9 @@ def get_recent_episode():
     """Get most recent episode from Webflow collection"""
     config = load_config()
     
+    # Create debug directory if it doesn't exist
+    os.makedirs('debug', exist_ok=True)
+    
     headers = {
         'accept': 'application/json',
         'authorization': f'Bearer {config["webflow"]["api_token"]}',
@@ -44,10 +48,10 @@ def get_recent_episode():
         response.raise_for_status()
         
         # Save response to file
-        with open('webflow_recent_ep.json', 'w', encoding='utf-8') as f:
+        with open('debug/webflow_recent_ep.json', 'w', encoding='utf-8') as f:
             json.dump(response.json(), f, indent=2)
             
-        logger.info("Recent episode data saved to webflow_recent_ep.json")
+        logger.info("Recent episode data saved to debug/webflow_recent_ep.json")
         
     except Exception as e:
         logger.error(f"Error getting recent episode: {e}")
