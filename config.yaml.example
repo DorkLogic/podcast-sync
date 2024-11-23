@@ -1,12 +1,50 @@
 # Webflow Configuration
 webflow:
-  api_token: "YOUR_API_TOKEN"
-  collection_id: "YOUR_COLLECTION_ID"
+  api_token: "YOUR_WEBFLOW_API_TOKEN"
+  episode_collection_id: "YOUR_EPISODE_COLLECTION_ID"
+  category_collection_id: "YOUR_CATEGORY_COLLECTION_ID"
 
 # RSS Feed Configuration
 rss:
-  feed_url: "https://feeds.buzzsprout.com/2194438.rss"
+  feed_url: "YOUR_RSS_FEED_URL"
 
-# API Configuration
-api:
-  webflow_base_url: "https://api.webflow.com/collections" 
+# Apple Podcast Configuration
+apple_podcast:
+  base_url: "YOUR_APPLE_PODCAST_URL"
+
+# Spotify Configuration
+spotify:
+  client_id: "YOUR_SPOTIFY_CLIENT_ID"
+  client_secret: "YOUR_SPOTIFY_CLIENT_SECRET"
+  show_id: "YOUR_SPOTIFY_SHOW_ID"
+  default_episode_id: "YOUR_DEFAULT_EPISODE_ID"  # optional
+
+# goodpods Configuration
+goodPods:
+  base_url: "YOUR_GOODPODS_URL"
+
+# default episode color
+default_episode_color: "#YOUR_DEFAULT_COLOR"
+
+# Scheduling Configuration
+schedule:
+  interval_minutes: 3  # How often to check for new episodes
+  start_datetime: "YYYY-MM-DD HH:MM:SS"  # When to start checking
+  timezone_offset: 0  # GMT offset (e.g., -5 for EST, -8 for PST)
+
+# OpenAI Configuration
+openai:
+  api_key: "YOUR_OPENAI_API_KEY"
+
+# BuzzSprout Configuration
+buzzSprout:
+  api_key: "YOUR_BUZZSPROUT_API_KEY"
+  podcast_id: "YOUR_PODCAST_ID"
+
+# Canva Configuration
+canva:
+  base_url: "https://api.canva.com/v1"
+  client_id: "YOUR_CANVA_CLIENT_ID"
+  client_secret: "YOUR_CANVA_CLIENT_SECRET"
+  api_key: "YOUR_CANVA_API_KEY"
+  redirect_uri: "YOUR_REDIRECT_URI"  # For OAuth flow 
