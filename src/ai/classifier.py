@@ -1,6 +1,7 @@
 import logging
 from typing import List
 from openai import OpenAI
+import tiktoken
 
 logger = logging.getLogger(__name__)
 
@@ -8,12 +9,12 @@ class CategoryClassifierError(Exception):
     """Custom exception for category classification"""
     pass
 
-def classify_episode_category(transcript: str, categories: List[str], config: dict) -> str:
+def classify_episode_category(episode_name: str, categories: List[str], config: dict) -> str:
     """
-    Use OpenAI to classify episode into a category
+    Use OpenAI to classify episode into a category based on its name
     
     Args:
-        transcript: Episode transcript text
+        episode_name: Name of the episode
         categories: List of valid category names
         config: Application configuration containing OpenAI settings
         
@@ -24,12 +25,11 @@ def classify_episode_category(transcript: str, categories: List[str], config: di
         client = OpenAI(api_key=config['openai']['api_key'])
         
         prompt = f"""
-        Given the following podcast transcript and list of categories, determine the most appropriate category.
+        Given the following podcast episode title and list of categories, determine the most appropriate category.
         
         Categories: {', '.join(categories)}
         
-        Transcript excerpt:
-        {transcript[:2000]}  # Using first 2000 chars to stay within token limits
+        Episode Title: {episode_name}
         
         Return only the category name that best matches, exactly as written in the categories list.
         """

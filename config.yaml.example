@@ -47,4 +47,14 @@ canva:
   client_id: "YOUR_CANVA_CLIENT_ID"
   client_secret: "YOUR_CANVA_CLIENT_SECRET"
   api_key: "YOUR_CANVA_API_KEY"
-  redirect_uri: "YOUR_REDIRECT_URI"  # For OAuth flow 
+  redirect_uri: "YOUR_REDIRECT_URI"  # For OAuth flow
+  design_id: "YOUR_TEMPLATE_DESIGN_ID"  # Default template design ID
+
+# Podcast Host Configuration
+hosts:
+  host1:
+    name: "Jessica Inskip"
+    short_name: "Jessica"
+  host2:
+    name: "Jessi Denwey"
+    short_name: "Jessi"

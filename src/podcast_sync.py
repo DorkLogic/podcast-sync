@@ -5,7 +5,7 @@ import feedparser
 import json
 import requests
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 import re
 import logging
 import yaml
@@ -15,25 +15,32 @@ import base64
 from requests.exceptions import RequestException
 from pathlib import Path
 from media.download_episode import get_latest_episode_url, download_episode
-from media.transcribe_podcast import transcribe_audio_file
+from media.transcribe_podcast import transcribe_audio_file, generate_questions
 from openai import OpenAI
 from ai.classifier import classify_episode_category
 from webflow.categories import get_categories
+from media.make_thumbnail import create_thumbnail
+from webflow.upload_asset import upload_asset
+from utils.convert_md_to_html import convert_markdown_to_html
 
 # At the top of the file, after the imports, add:
 SCRIPT_DIR = Path(__file__).parent
 ROOT_DIR = SCRIPT_DIR.parent
+DEBUG_DIR = ROOT_DIR / 'debug'
+IMAGES_DIR = DEBUG_DIR / 'images'
+THUMBNAILS_DIR = IMAGES_DIR / 'thumbnails'
 
-# Create debug directory if it doesn't exist
-debug_dir = ROOT_DIR / 'debug'
-debug_dir.mkdir(exist_ok=True)
+# Create required directories
+DEBUG_DIR.mkdir(exist_ok=True)
+IMAGES_DIR.mkdir(exist_ok=True)
+THUMBNAILS_DIR.mkdir(exist_ok=True)
 
 # Configure logging to write to both file and console
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(debug_dir / 'debug_log.txt'),
+        logging.FileHandler(DEBUG_DIR / 'debug_log.txt'),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -281,6 +288,24 @@ def get_goodpods_link(episode_number: int, episode_title: str) -> str:
     # Construct the full URL with episode number and title
     return f"https://goodpods.com/podcasts/market-makeher-podcast-{podcast_id}/{episode_number}-{title_slug}"
 
+def upload_image_to_webflow(image_path: Path, config: dict, alt_text: str) -> dict:
+    """
+    Upload an image to Webflow and return the image asset data
+    
+    Args:
+        image_path: Path to the image file
+        config: Application configuration containing Webflow settings
+        alt_text: Alt text for the image
+        
+    Returns:
+        Dict containing fileId, url, and alt text for the image
+    """
+    try:
+        return upload_asset(image_path, config, alt_text)
+    except Exception as e:
+        logger.error(f"Failed to upload image to Webflow: {e}")
+        raise
+
 def get_latest_episode() -> Dict:
     """Fetch and parse the latest episode from RSS feed"""
     config = load_config()
@@ -354,14 +379,57 @@ def get_latest_episode() -> Dict:
             goodpods_link = get_goodpods_link(episode_number, entry.title)
             episode['fields']['episode-goodpods-link'] = goodpods_link
         
+        # Create thumbnail before returning episode
+        try:
+            logger.info("Creating episode thumbnail...")
+            background_path = IMAGES_DIR / 'default_episode_background.png'
+            if not background_path.exists():
+                logger.error(f"Background image not found at {background_path}")
+                raise PodcastSyncError("Background image for thumbnail not found")
+                
+            thumbnail_filename = f"{episode['fields']['slug']}{background_path.suffix}"
+            thumbnail_path = THUMBNAILS_DIR / thumbnail_filename
+            
+            # Create thumbnail with episode number formatted as "EP XX"
+            thumbnail_text = f"EP {episode_number}"
+            created_thumbnail_path = create_thumbnail(
+                text=thumbnail_text,
+                input_image_path=str(background_path),
+                output_name=episode['fields']['slug'],
+                font_size=75,
+                font_color="#FFFFFF"
+            )
+            logger.info(f"Thumbnail created at {thumbnail_path}")
+            
+            # Upload thumbnail to Webflow
+            logger.info("Uploading thumbnail to Webflow...")
+            image_data = upload_image_to_webflow(
+                Path(created_thumbnail_path), 
+                config,
+                alt_text=episode['fields']['name']  # Use episode name as alt text
+            )
+            
+            # Only update episode-main-image if upload succeeded
+            if image_data:
+                episode['fields']['episode-main-image'] = image_data
+                logger.info(f"Thumbnail uploaded successfully with ID: {image_data['fileId']}")
+            else:
+                logger.error("Failed to get image data from Webflow upload")
+                raise PodcastSyncError("Failed to upload thumbnail to Webflow")
+                
+        except Exception as e:
+            logger.error(f"Failed to create or upload thumbnail: {e}")
+            raise PodcastSyncError(f"Thumbnail processing failed: {str(e)}")
+
         return episode
         
     except Exception as e:
         raise PodcastSyncError(f"Failed to parse RSS feed: {str(e)}")
 
-def publish_to_webflow(episode: dict, config: dict) -> dict:
+def publish_to_webflow(episode: dict, config: dict, debug_mode: bool = False) -> Optional[dict]:
     """
     Create and publish episode in Webflow collection
+    If debug_mode is True, only saves request body without making API call
     """
     # Use v2 API endpoint with updated collection_id reference
     create_url = f'https://api.webflow.com/v2/collections/{config["webflow"]["episode_collection_id"]}/items'
@@ -381,7 +449,7 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
         if 'episode-goodpods-link' in episode['fields']:
             episode['fields']['episode-anchor-link'] = episode['fields'].pop('episode-goodpods-link')
             
-        # Valid fields from collection schema
+        # Valid fields from collection schema - UPDATED to include jessie-s-questions
         valid_fields = [
             'name',  # Episode Title (matches slug in collection)
             'slug',  # Episode Link (matches slug in collection)
@@ -389,6 +457,7 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
             'episode-description-excerpt',  # Episode - Excerpt
             'description',  # Description
             'episode-transcript',  # Episode - Transcript
+            'jessie-s-questions',  # Jessie's Questions (added this)
             'episode-category',  # Episode - Category
             'episode-featured',  # Episode - Featured?
             'episode-color',  # Episode - Color
@@ -400,17 +469,34 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
         ]
         
         # Only include valid fields in the request
-        episode['fields'] = {k: v for k, v in episode['fields'].items() 
-                           if k in valid_fields}
+        filtered_fields = {k: v for k, v in episode['fields'].items() 
+                         if k in valid_fields}
+        
+        # Log fields before filtering
+        logger.debug(f"Fields before filtering: {list(episode['fields'].keys())}")
+        logger.debug(f"Fields after filtering: {list(filtered_fields.keys())}")
         
         # Prepare the request body according to v2 API format
         request_body = {
-            "fieldData": episode['fields']  # Wrap fields in fieldData property
+            "fieldData": filtered_fields
         }
         
-        logger.info("Creating episode in Webflow...")
-        logger.debug(f"Request body: {json.dumps(request_body, indent=2)}")
+        # Create network debug directory if it doesn't exist
+        network_debug_dir = DEBUG_DIR / 'network'
+        network_debug_dir.mkdir(exist_ok=True)
         
+        # Save request body to debug file
+        debug_file = network_debug_dir / 'webflow_publish_request.json'
+        with open(debug_file, 'w', encoding='utf-8') as f:
+            json.dump(request_body, f, indent=2)
+        logger.info(f"Saved request body to {debug_file}")
+        
+        if debug_mode:
+            logger.info("Debug mode: Skipping API call")
+            return None
+            
+        # Make actual API call if not in debug mode
+        logger.info("Creating episode in Webflow...")
         create_response = requests.post(create_url, headers=headers, json=request_body)
         
         # Log the full response details
@@ -427,7 +513,7 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
         
     except RequestException as e:
         logger.error(f"Failed to create/publish Webflow episode: {str(e)}")
-        if 'create_response' in locals():
+        if not debug_mode and 'create_response' in locals():
             logger.error(f"Response Status: {create_response.status_code}")
             logger.error(f"Response Headers: {dict(create_response.headers)}")
             logger.error(f"Response Body: {create_response.text}")
@@ -460,7 +546,7 @@ def get_category_id(category_name: str, config: dict) -> str:
         logger.error(f"Error getting category ID: {e}")
         raise
 
-def main():
+def main(debug_mode: bool = False):
     """Create and publish the latest episode in Webflow"""
     try:
         config = load_config()
@@ -474,7 +560,7 @@ def main():
         try:
             # Download audio
             episode_url, episode_title = get_latest_episode_url()
-            audio_dir = debug_dir / 'audio'
+            audio_dir = DEBUG_DIR / 'audio'
             audio_dir.mkdir(exist_ok=True)
             
             clean_filename = f"ep-{episode_title.split('.')[0].split('-')[0].strip()}.mp3"
@@ -487,19 +573,82 @@ def main():
             # Initialize OpenAI client and get transcription
             logger.info("Starting audio transcription...")
             client = OpenAI(api_key=config['openai']['api_key'])
-            transcript = transcribe_audio_file(client, str(output_path))
+            transcript = transcribe_audio_file(client, str(output_path), config)
             
-            # Add transcript to episode fields
-            episode['fields']['episode-transcript'] = transcript
-            logger.info("Transcription complete and added to episode fields")
+            # Generate questions and answers if they don't exist
+            question_file_path = audio_dir / f"{output_path.stem}-questions.md"
+            if not question_file_path.exists():
+                logger.info("Generating questions and answers...")
+                generate_questions(client, transcript, question_file_path)
+                logger.info(f"Questions and answers saved to {question_file_path}")
+            else:
+                logger.info(f"Using existing questions from {question_file_path}")
+
+            # Convert questions to HTML and add to episode fields
+            if question_file_path.exists():
+                logger.info("Converting questions from markdown to HTML...")
+                try:
+                    with open(question_file_path, 'r', encoding='utf-8') as f:
+                        questions_md = f.read()
+                    
+                    # Split into individual Q&A pairs
+                    qa_pairs = questions_md.strip().split('\n\n')
+                    
+                    # Convert to HTML divs instead of list items
+                    html_items = []
+                    for pair in qa_pairs:
+                        if pair.strip():
+                            q, a = pair.split('\nA: ')
+                            q = q.replace('Q: ', '')
+                            html_items.append(
+                                f'<div class="qa-item">'
+                                f'<div><strong>Q:</strong> {q}</div>'
+                                f'<div><strong>A:</strong> {a}</div>'
+                                f'</div>'
+                            )
+                    
+                    # Wrap in container div
+                    questions_html = (
+                        '<div class="qa-container">'
+                        f'{" ".join(html_items)}'
+                        '</div>'
+                    )
+                    
+                    # Add HTML questions to episode fields
+                    episode['fields']['jessie-s-questions'] = questions_html
+                    logger.info("HTML questions added to episode fields")
+                except Exception as e:
+                    logger.error(f"Failed to convert questions to HTML: {e}")
+                    raise
+            else:
+                logger.error(f"Questions markdown file not found at {question_file_path}")
+
+            # Convert transcript markdown to HTML before adding to episode fields
+            transcript_md_path = output_path.with_suffix('.md')
+            if transcript_md_path.exists():
+                logger.info("Converting transcript from markdown to HTML...")
+                try:
+                    transcript_html = convert_markdown_to_html(transcript_md_path)
+                    # Add HTML transcript to episode fields
+                    episode['fields']['episode-transcript'] = transcript_html
+                    logger.info("HTML transcript added to episode fields")
+                except Exception as e:
+                    logger.error(f"Failed to convert transcript to HTML: {e}")
+                    raise
+            else:
+                logger.error(f"Transcript markdown file not found at {transcript_md_path}")
 
             # Get category names from Webflow
             logger.info("Getting categories from Webflow...")
             categories = get_categories(config)
             
-            # Classify episode
+            # Classify episode using episode name instead of transcript
             logger.info("Classifying episode...")
-            category = classify_episode_category(transcript, categories, config)
+            category = classify_episode_category(
+                episode['fields']['name'],  # Use episode name instead of transcript
+                categories, 
+                config
+            )
             logger.info(f"Episode classified as: {category}")
             
             # Get category ID and add to episode fields
@@ -517,8 +666,11 @@ def main():
             json.dump(episode, f, indent=2)
             
         # Create and publish episode in Webflow
-        result = publish_to_webflow(episode, config)
-        logger.info(f"Successfully created and published episode with ID: {result.get('_id')}")
+        result = publish_to_webflow(episode, config, debug_mode=debug_mode)
+        if debug_mode:
+            logger.info("Debug mode: Request body saved without making API call")
+        else:
+            logger.info(f"Successfully created and published episode with ID: {result.get('_id')}")
         
     except PodcastSyncError as e:
         logger.error(str(e))
@@ -528,4 +680,6 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main() 
+    # Check if debug mode is requested via command line argument
+    debug_mode = "--debug" in sys.argv
+    main(debug_mode=debug_mode) 

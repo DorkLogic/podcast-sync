@@ -88,9 +88,78 @@ def get_collection_items(collection_id: str, output_filename: str):
             logger.error(f"Response: {response.text}")
         raise
 
+def get_sites(config: dict) -> None:
+    """
+    Fetch and display all available Webflow sites
+    """
+    try:
+        url = 'https://api.webflow.com/v2/sites'
+        
+        headers = {
+            'accept': 'application/json',
+            'authorization': f'Bearer {config["webflow"]["api_token"]}'
+        }
+        
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 403 and 'missing_scopes' in response.text:
+            logger.error("""
+Your API token is missing required scopes. Please create a new API token with these scopes:
+- sites:read
+
+To create a new token:
+1. Go to Webflow Dashboard > Account Settings > Workspace Settings > API Access
+2. Create New Access Token
+3. Enable the 'sites:read' scope
+4. Copy the new token to your config.yaml
+            """)
+            return
+            
+        response.raise_for_status()
+        
+        sites = response.json()
+        
+        # Save full response to debug folder
+        debug_dir = Path(__file__).parent.parent / 'debug'
+        debug_dir.mkdir(exist_ok=True)
+        
+        # Save full response to file
+        sites_file = debug_dir / 'webflow_sites.json'
+        with open(sites_file, 'w', encoding='utf-8') as f:
+            json.dump(sites, f, indent=2)
+            
+        # Print simplified site information
+        print("\nAvailable Webflow Sites:")
+        print("-" * 50)
+        for site in sites.get('sites', []):
+            print(f"Name: {site.get('displayName')}")
+            print(f"ID: {site.get('id')}")
+            print(f"Short Name: {site.get('shortName')}")
+            print(f"Last Published: {site.get('lastPublished')}")
+            if site.get('customDomains'):
+                print("Custom Domains:")
+                for domain in site['customDomains']:
+                    print(f"  - {domain.get('url')}")
+            print("-" * 50)
+            
+        logger.info(f"Full site details saved to {sites_file}")
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch Webflow sites: {e}")
+        if 'response' in locals():
+            logger.error(f"Response: {response.text}")
+        raise
+
 def main():
-    """Get items and schemas from both collections"""
+    """Get sites and collection information"""
     config = load_config()
+    
+    # Get sites first
+    logger.info("Fetching Webflow sites...")
+    try:
+        get_sites(config)
+    except Exception as e:
+        logger.error("Failed to get sites, continuing with other operations...")
     
     # Get episodes collection schema and items
     logger.info("Fetching episodes collection schema...")
