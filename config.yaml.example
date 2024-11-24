@@ -3,6 +3,7 @@ webflow:
   api_token: "YOUR_WEBFLOW_API_TOKEN"
   episode_collection_id: "YOUR_EPISODE_COLLECTION_ID"
   category_collection_id: "YOUR_CATEGORY_COLLECTION_ID"
+  site_id: "YOUR_SITE_ID"
 
 # RSS Feed Configuration
 rss:
@@ -41,20 +42,11 @@ buzzSprout:
   api_key: "YOUR_BUZZSPROUT_API_KEY"
   podcast_id: "YOUR_PODCAST_ID"
 
-# Canva Configuration
-canva:
-  base_url: "https://api.canva.com/v1"
-  client_id: "YOUR_CANVA_CLIENT_ID"
-  client_secret: "YOUR_CANVA_CLIENT_SECRET"
-  api_key: "YOUR_CANVA_API_KEY"
-  redirect_uri: "YOUR_REDIRECT_URI"  # For OAuth flow
-  design_id: "YOUR_TEMPLATE_DESIGN_ID"  # Default template design ID
-
 # Podcast Host Configuration
 hosts:
   host1:
-    name: "Jessica Inskip"
-    short_name: "Jessica"
+    name: "YOUR_HOST1_NAME"
+    short_name: "YOUR_HOST1_SHORT_NAME"
   host2:
-    name: "Jessi Denwey"
-    short_name: "Jessi"
+    name: "YOUR_HOST2_NAME"
+    short_name: "YOUR_HOST2_SHORT_NAME"
