@@ -29,6 +29,9 @@ ROOT_DIR = SCRIPT_DIR.parent
 DEBUG_DIR = ROOT_DIR / 'debug'
 IMAGES_DIR = DEBUG_DIR / 'images'
 THUMBNAILS_DIR = IMAGES_DIR / 'thumbnails'
+ASSETS_DIR = ROOT_DIR / 'assets'
+ASSETS_IMAGES_DIR = ASSETS_DIR / 'images'
+ASSETS_FONTS_DIR = ASSETS_DIR / 'fonts'
 
 # Create required directories
 DEBUG_DIR.mkdir(exist_ok=True)
@@ -382,7 +385,7 @@ def get_latest_episode() -> Dict:
         # Create thumbnail before returning episode
         try:
             logger.info("Creating episode thumbnail...")
-            background_path = IMAGES_DIR / 'default_episode_background.png'
+            background_path = ASSETS_IMAGES_DIR / 'default_episode_background.png'
             if not background_path.exists():
                 logger.error(f"Background image not found at {background_path}")
                 raise PodcastSyncError("Background image for thumbnail not found")
@@ -391,13 +394,16 @@ def get_latest_episode() -> Dict:
             thumbnail_path = THUMBNAILS_DIR / thumbnail_filename
             
             # Create thumbnail with episode number formatted as "EP XX"
-            thumbnail_text = f"EP {episode_number}"
+            thumbnail_text = f"{episode_number}"
+            font_path = ASSETS_FONTS_DIR / "AbrilFatface-Regular.ttf"
             created_thumbnail_path = create_thumbnail(
                 text=thumbnail_text,
                 input_image_path=str(background_path),
                 output_name=episode['fields']['slug'],
-                font_size=75,
-                font_color="#FFFFFF"
+                font_size=225,
+                font_color="#FFFFFF",
+                font_path=str(font_path),  # Convert Path to string
+                position=(420, 720)
             )
             logger.info(f"Thumbnail created at {thumbnail_path}")
             
@@ -661,7 +667,7 @@ def main(debug_mode: bool = False):
             # Continue with episode creation even if audio processing fails
         
         # Save REST call body for debugging
-        debug_file = ROOT_DIR / 'test_rest.json'
+        debug_file = DEBUG_DIR / 'test_rest.json'
         with open(debug_file, 'w', encoding='utf-8') as f:
             json.dump(episode, f, indent=2)
             

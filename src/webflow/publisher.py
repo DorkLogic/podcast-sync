@@ -10,6 +10,54 @@ class WebflowPublishError(Exception):
     """Custom exception for Webflow publishing errors"""
     pass
 
+def publish_site(config: dict) -> None:
+    """
+    Publish the Webflow site using deployments endpoint
+    Args:
+        config: Application configuration containing Webflow settings
+    """
+    url = f'https://api.webflow.com/v2/sites/{config["webflow"]["site_id"]}/deployments'
+    
+    headers = {
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'authorization': f'Bearer {config["webflow"]["api_token"]}',
+    }
+    
+    try:
+        # Create a deployment
+        logger.info("Creating site deployment...")
+        
+        data = {
+            "status": "staged"  # First stage the changes
+        }
+        
+        # Create deployment
+        deploy_response = requests.post(url, headers=headers, json=data)
+        deploy_response.raise_for_status()
+        deployment = deploy_response.json()
+        deployment_id = deployment.get('id')
+        
+        if not deployment_id:
+            raise WebflowPublishError("No deployment ID returned")
+            
+        # Publish the deployment
+        publish_url = f'{url}/{deployment_id}/publish'
+        logger.info(f"Publishing deployment {deployment_id}...")
+        
+        publish_response = requests.post(publish_url, headers=headers)
+        publish_response.raise_for_status()
+        
+        logger.info("Site published successfully")
+        
+    except Exception as e:
+        logger.error(f"Failed to publish site: {e}")
+        if 'publish_response' in locals() and hasattr(publish_response, 'text'):
+            logger.error(f"Publish Response: {publish_response.text}")
+        if 'deploy_response' in locals() and hasattr(deploy_response, 'text'):
+            logger.error(f"Deploy Response: {deploy_response.text}")
+        raise WebflowPublishError(f"Failed to publish site: {str(e)}")
+
 def publish_to_webflow(episode: dict, config: dict) -> dict:
     """
     Create and publish episode in Webflow collection

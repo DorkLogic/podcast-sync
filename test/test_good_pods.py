@@ -5,10 +5,13 @@ import logging
 import sys
 from bs4 import BeautifulSoup
 import json
-import re
-import os
+from pathlib import Path
 
-# Configure logging to handle Unicode
+# Define directory paths
+SCRIPT_DIR = Path(__file__).parent
+ROOT_DIR = SCRIPT_DIR.parent
+
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -19,7 +22,8 @@ logger = logging.getLogger(__name__)
 def load_config():
     """Load configuration from config.yaml"""
     try:
-        with open('config.yaml', 'r') as f:
+        config_path = ROOT_DIR / 'config.yaml'
+        with open(config_path, 'r') as f:
             return yaml.safe_load(f)
     except Exception as e:
         logger.error(f"Error loading config: {e}")
@@ -44,45 +48,56 @@ def get_goodpods_page():
 
 def main():
     try:
-        # Create debug directory if it doesn't exist
-        os.makedirs('debug', exist_ok=True)
+        # Create debug directory in project root
+        debug_dir = ROOT_DIR / 'debug'
+        debug_dir.mkdir(exist_ok=True)
         
         # Fetch the page content
         logger.info("Fetching Goodpods page content...")
         html_content = get_goodpods_page()
         
         # Save the raw HTML to a file for inspection
-        with open('debug/goodpods_page.html', 'w', encoding='utf-8') as f:
+        html_path = debug_dir / 'goodpods_page.html'
+        with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
-        logger.info("Raw HTML saved to debug/goodpods_page.html")
+        logger.info(f"Raw HTML saved to {html_path}")
         
         # Parse with BeautifulSoup for initial inspection
         soup = BeautifulSoup(html_content, 'html.parser')
         
-        # Look at all script tags with type application/ld+json
-        logger.info("\nExamining JSON-LD data:")
-        scripts = soup.find_all('script', {'type': 'application/ld+json'})
-        for i, script in enumerate(scripts):
-            try:
-                data = json.loads(script.string)
-                logger.info(f"\nScript {i + 1}:")
-                logger.info(f"Type: {data.get('@type')}")
-                if isinstance(data, dict) and 'itemListElement' in data:
-                    logger.info("Found itemListElement!")
-                    for item in data['itemListElement']:
-                        if 'item' in item and 'url' in item['item']:
-                            logger.info(f"URL: {item['item']['url']}")
-            except json.JSONDecodeError:
-                logger.error(f"Could not parse script {i + 1}")
-                continue
+        # Save JSON-LD data analysis
+        json_ld_path = debug_dir / 'goodpods_jsonld.txt'
+        with open(json_ld_path, 'w', encoding='utf-8') as f:
+            # Look at all script tags with type application/ld+json
+            f.write("JSON-LD Data Analysis:\n")
+            scripts = soup.find_all('script', {'type': 'application/ld+json'})
+            for i, script in enumerate(scripts):
+                try:
+                    data = json.loads(script.string)
+                    f.write(f"\nScript {i + 1}:\n")
+                    f.write(f"Type: {data.get('@type')}\n")
+                    if isinstance(data, dict) and 'itemListElement' in data:
+                        f.write("Found itemListElement!\n")
+                        for item in data['itemListElement']:
+                            if 'item' in item and 'url' in item['item']:
+                                f.write(f"URL: {item['item']['url']}\n")
+                except json.JSONDecodeError:
+                    f.write(f"Could not parse script {i + 1}\n")
+                f.write("-" * 50 + "\n")
+        
+        logger.info(f"JSON-LD analysis saved to {json_ld_path}")
 
-        # Also look for regular links
-        logger.info("\nExamining regular links:")
-        all_links = soup.find_all('a', href=lambda h: h and '/podcasts/market-makeher-podcast-274363/' in h)
-        for link in all_links:
-            logger.info(f"Link text: {link.text.strip()}")
-            logger.info(f"Link href: {link['href']}")
-            logger.info("---")
+        # Save link analysis
+        links_path = debug_dir / 'goodpods_links.txt'
+        with open(links_path, 'w', encoding='utf-8') as f:
+            f.write("Regular Links Analysis:\n")
+            all_links = soup.find_all('a', href=lambda h: h and '/podcasts/market-makeher-podcast-274363/' in h)
+            for link in all_links:
+                f.write(f"Link text: {link.text.strip()}\n")
+                f.write(f"Link href: {link['href']}\n")
+                f.write("-" * 50 + "\n")
+        
+        logger.info(f"Links analysis saved to {links_path}")
             
     except Exception as e:
         logger.error(f"Error in main: {e}")

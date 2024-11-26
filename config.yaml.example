@@ -50,3 +50,12 @@ hosts:
   host2:
     name: "YOUR_HOST2_NAME"
     short_name: "YOUR_HOST2_SHORT_NAME"
+
+# Text Replacement Configuration
+text_replacements:
+  - wrong: "market maker"
+    correct: "Market MakeHer"
+  - wrong: "marketmaker"
+    correct: "Market MakeHer"
+  - wrong: "market makeher"
+    correct: "Market MakeHer"

@@ -17,7 +17,9 @@ def create_thumbnail(
     output_name: Optional[str] = None,
     font_size: int = 75,
     font_color: str = "#FFFFFF",
-    font_path: Optional[str] = None
+    font_path: Optional[str] = None,
+    position: Optional[tuple] = None,
+    alignment: str = "center"
 ) -> str:
     """
     Creates a thumbnail by adding text to an existing image if it doesn't already exist
@@ -29,21 +31,23 @@ def create_thumbnail(
         font_size: Size of the font (default: 75)
         font_color: Color of the text (default: white)
         font_path: Path to a custom font file (TTF/OTF)
+        position: Optional tuple of coordinates for custom position
+        alignment: Alignment of the text (default: center)
         
     Returns:
         Path to the thumbnail (either existing or newly created)
     """
     try:
-        # Create debug/thumbnails folder if it doesn't exist
-        output_dir = "debug/thumbnails"
-        os.makedirs(output_dir, exist_ok=True)
+        # Update output directory to use the root debug directory
+        output_dir = Path(__file__).parent.parent.parent / 'debug' / 'images' / 'thumbnails'
+        output_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate output filename
         if output_name is None:
             base_name = os.path.splitext(os.path.basename(input_image_path))[0]
             output_name = f"thumbnail_{base_name}"
             
-        output_path = os.path.join(output_dir, f"{output_name}.png")
+        output_path = output_dir / f"{output_name}.png"
         
         # Check if thumbnail already exists
         if os.path.exists(output_path):
@@ -67,10 +71,12 @@ def create_thumbnail(
             try:
                 if font_path:
                     font = ImageFont.truetype(font_path, font_size)
+                    logging.info(f"Loaded custom font: {font_path} with size {font_size}")
                 else:
                     # Try Arial first, then system default
                     try:
                         font = ImageFont.truetype("arial.ttf", font_size)
+                        logging.info(f"Loaded Arial font with size {font_size}")
                     except OSError:
                         font = ImageFont.load_default()
                         logging.warning("Arial font not found, using default font")
@@ -86,9 +92,19 @@ def create_thumbnail(
             text_width = bbox[2] - bbox[0]
             text_height = bbox[3] - bbox[1]
             
-            # Calculate position (centered horizontally, top third vertically)
-            x = (img_width - text_width) // 2
-            y = img_height // 3 - text_height // 2
+            # Calculate position based on alignment or use custom position
+            if position:
+                x, y = position
+            else:
+                if alignment == "center":
+                    x = (img_width - text_width) // 2
+                    y = img_height // 3 - text_height // 2
+                elif alignment == "top-left":
+                    x, y = 0, 0
+                elif alignment == "bottom-right":
+                    x = img_width - text_width
+                    y = img_height - text_height
+                # Add more alignment options as needed
             
             # Add text to image
             draw.text(

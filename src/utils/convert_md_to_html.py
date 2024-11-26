@@ -62,6 +62,32 @@ def normalize_host_names(content: str, config: dict) -> str:
         logger.error(f"Error normalizing host names: {e}")
         raise
 
+def normalize_text(content: str, config: dict) -> str:
+    """
+    Replace any variations of text with their correct spellings from config
+    """
+    try:
+        # Handle host name replacements
+        content = normalize_host_names(content, config)
+        
+        # Handle general text replacements
+        if 'text_replacements' in config:
+            for replacement in config['text_replacements']:
+                wrong = replacement['wrong']
+                correct = replacement['correct']
+                content = re.sub(
+                    f'\\b{wrong}\\b',
+                    correct,
+                    content,
+                    flags=re.IGNORECASE
+                )
+        
+        return content
+        
+    except Exception as e:
+        logger.error(f"Error normalizing text: {e}")
+        raise
+
 def convert_markdown_to_html(markdown_path: Path) -> str:
     """
     Convert markdown content to HTML, with special handling for podcast transcripts
@@ -69,18 +95,17 @@ def convert_markdown_to_html(markdown_path: Path) -> str:
     try:
         logger.info("Converting markdown content to HTML...")
         
-        # Load config for host names
+        # Load config for text replacements
         config = load_config()
         
         # Read markdown content
         with open(markdown_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Normalize host names before any other processing
-        content = normalize_host_names(content, config)
+        # Normalize all text (hosts and other replacements) before any other processing
+        content = normalize_text(content, config)
             
         # Pre-process speaker labels before markdown conversion
-        # Replace **Speaker:** with <strong>Speaker:</strong>
         content = content.replace('**', '<strong>', 1).replace('**', '</strong>', 1) if '**' in content else content
         
         # Convert markdown to HTML
