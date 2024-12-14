@@ -1,9 +1,9 @@
-import logging
+from utils.log_setup import setup_project_logging
+logger = setup_project_logging()
+
 import base64
 import requests
 from typing import Optional
-
-logger = logging.getLogger(__name__)
 
 def get_access_token(client_id: str, client_secret: str) -> str:
     """Get access token using client credentials flow"""

@@ -1,10 +1,10 @@
 import yaml
 import sys
-import logging
+from utils.log_setup import setup_project_logging
 from pathlib import Path
 from typing import Dict
 
-logger = logging.getLogger(__name__)
+logger = setup_project_logging()
 
 class ConfigError(Exception):
     """Custom exception for configuration errors"""

@@ -1,20 +1,16 @@
-import logging
-from typing import List
-from openai import OpenAI
-import tiktoken
-
-logger = logging.getLogger(__name__)
+from utils.log_setup import setup_project_logging
+logger = setup_project_logging()
 
 class CategoryClassifierError(Exception):
     """Custom exception for category classification"""
     pass
 
-def classify_episode_category(episode_name: str, categories: List[str], config: dict) -> str:
+def classify_episode_category(text: str, categories: list, config: dict) -> str:
     """
     Use OpenAI to classify episode into a category based on its name
     
     Args:
-        episode_name: Name of the episode
+        text: Name of the episode
         categories: List of valid category names
         config: Application configuration containing OpenAI settings
         
@@ -29,7 +25,7 @@ def classify_episode_category(episode_name: str, categories: List[str], config: 
         
         Categories: {', '.join(categories)}
         
-        Episode Title: {episode_name}
+        Episode Title: {text}
         
         Return only the category name that best matches, exactly as written in the categories list.
         """

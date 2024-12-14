@@ -1,10 +1,10 @@
-import logging
+from utils.log_setup import setup_project_logging
+logger = setup_project_logging()
+
 import json
 from typing import Dict
 from requests.exceptions import RequestException
 import requests
-
-logger = logging.getLogger(__name__)
 
 class WebflowPublishError(Exception):
     """Custom exception for Webflow publishing errors"""

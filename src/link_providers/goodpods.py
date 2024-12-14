@@ -1,8 +1,5 @@
-import logging
-from typing import Optional
-from utils.text import generate_slug
-
-logger = logging.getLogger(__name__)
+from utils.log_setup import setup_project_logging
+logger = setup_project_logging()
 
 def get_goodpods_link(episode_number: int, episode_title: str) -> str:
     """

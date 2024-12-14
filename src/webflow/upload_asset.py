@@ -3,8 +3,9 @@ import logging
 import requests
 from pathlib import Path
 from typing import Optional, Dict
+from utils.log_setup import setup_project_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_project_logging()
 
 class AssetUploadError(Exception):
     """Custom exception for asset upload errors"""

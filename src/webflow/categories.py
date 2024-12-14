@@ -1,8 +1,6 @@
-import logging
 from typing import List, Dict, Optional
-import requests
-
-logger = logging.getLogger(__name__)
+from utils.log_setup import setup_project_logging
+logger = setup_project_logging()
 
 class WebflowCategoryError(Exception):
     """Custom exception for category operations"""

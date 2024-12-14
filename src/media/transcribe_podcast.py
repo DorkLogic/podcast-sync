@@ -7,14 +7,10 @@ from openai import OpenAI
 from pathlib import Path
 from utils.convert_md_to_html import convert_markdown_to_html
 import json
+from utils.log_setup import setup_project_logging
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    stream=sys.stdout
-)
-logger = logging.getLogger(__name__)
+logger = setup_project_logging()
 
 # Define directory paths
 SCRIPT_DIR = Path(__file__).parent

@@ -1,6 +1,8 @@
 import re
 import html
 from bs4 import BeautifulSoup
+from utils.log_setup import setup_project_logging
+logger = setup_project_logging()
 
 def generate_slug(title: str) -> str:
     """Generate a URL-friendly slug from the episode title"""

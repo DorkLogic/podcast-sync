@@ -1,12 +1,12 @@
 import feedparser
-import logging
+from utils.log_setup import setup_project_logging
 from typing import Dict
 from utils.text import generate_slug, get_episode_number, clean_html
 from link_providers.apple import get_apple_podcast_link
 from link_providers.spotify import get_spotify_podcast_link
 from link_providers.goodpods import get_goodpods_link
 
-logger = logging.getLogger(__name__)
+logger = setup_project_logging()
 
 class FeedParserError(Exception):
     """Custom exception for feed parsing errors"""

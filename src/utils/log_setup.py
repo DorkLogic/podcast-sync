@@ -2,8 +2,8 @@ import logging
 import sys
 from pathlib import Path
 
-def setup_logging():
-    """Configure and return logger"""
+def setup_project_logging():
+    """Configure and return logger for the podcast sync project"""
     # Create debug directory if it doesn't exist
     debug_dir = Path('debug')
     debug_dir.mkdir(exist_ok=True)

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-import markdown
-import logging
 import yaml
+import markdown
 from pathlib import Path
 import re
+from utils.log_setup import setup_project_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_project_logging()
 
 def load_config() -> dict:
     """Load configuration from config.yaml"""
@@ -88,7 +88,7 @@ def normalize_text(content: str, config: dict) -> str:
         logger.error(f"Error normalizing text: {e}")
         raise
 
-def convert_markdown_to_html(markdown_path: Path) -> str:
+def convert_markdown_to_html(markdown_path: str) -> str:
     """
     Convert markdown content to HTML, with special handling for podcast transcripts
     """

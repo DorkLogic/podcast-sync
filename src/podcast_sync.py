@@ -22,6 +22,7 @@ from webflow.categories import get_categories
 from media.make_thumbnail import create_thumbnail
 from webflow.upload_asset import upload_asset
 from utils.convert_md_to_html import convert_markdown_to_html
+from utils.optimize_image import optimize_image
 
 # At the top of the file, after the imports, add:
 SCRIPT_DIR = Path(__file__).parent
@@ -85,14 +86,20 @@ def get_apple_podcast_link(episode_number: int) -> tuple[str, str]:
         # Find the script with workExample data
         for script in scripts:
             if script.string and '"workExample"' in script.string:
-                data = json.loads(script.string)
-                # Find the matching episode
-                for example in data.get('workExample', []):
-                    if example.get('name', '').startswith(f"{episode_number}."):
-                        full_url = example['url']
-                        # Create short URL by removing base
-                        short_url = full_url.replace('https://podcasts.apple.com/us/podcast/', '')
-                        return short_url, full_url
+                try:
+                    data = json.loads(script.string)
+                    work_examples = data.get('workExample', [])
+                    # Find the matching episode
+                    for example in work_examples:
+                        if isinstance(example, dict) and example.get('name', '').startswith(f"{episode_number}."):
+                            full_url = example.get('url')
+                            if full_url:
+                                # Create short URL by removing base
+                                short_url = full_url.replace('https://podcasts.apple.com/us/podcast/', '')
+                                return short_url, full_url
+                except (json.JSONDecodeError, AttributeError) as e:
+                    logger.error(f"Error parsing Apple Podcast data: {e}")
+                    continue
                         
         logger.warning(f"Could not find episode {episode_number} in Apple Podcast data")
         return None, None
@@ -330,7 +337,7 @@ def get_latest_episode() -> Dict:
         formatted_title = f"Ep {episode_number}: {title_without_number}" if episode_number else entry.title
         
         # Get Apple Podcast link
-        apple_podcast_link = get_apple_podcast_link(episode_number) if episode_number else None
+        short_link, full_link = get_apple_podcast_link(episode_number) if episode_number else (None, None)
         
         # Get full content and process it
         full_content = entry.content[0].value if entry.content else entry.summary
@@ -339,7 +346,7 @@ def get_latest_episode() -> Dict:
         # Get Spotify link
         spotify_link = get_spotify_podcast_link(episode_number) if episode_number else None
         
-        # Map RSS feed data to Webflow collection fields
+        # Create initial episode dict without thumbnail
         episode = {
             'fields': {
                 'name': formatted_title,  # Episode Title with "Ep N:" format
@@ -350,39 +357,10 @@ def get_latest_episode() -> Dict:
                 'episode-description': processed_content,  # Episode - Episode Equity
                 'episode-featured': True,  # Set featured to true for latest episode
                 'episode-color': config['default_episode_color'],  # Set default episode color from config
-                'episode-main-image': {
-                    "fileId": "6734df80b502809c5c58fb7c",
-                    "url": "https://cdn.prod.website-files.com/6581b3472ae6c3c7af188759/6734df80b502809c5c58fb7c_Ep%2062%20Thumbnail%20Market%20MakeHer%20Podcast.png",
-                    "alt": None
-                }
             }
         }
-        
-        # Add Apple Podcast link if found
-        if apple_podcast_link:
-            apple_link_short = apple_podcast_link[0].replace("https://podcasts.apple.com/us/podcast/", "")
-            episode['fields']['apple-podcast-link-for-player'] = apple_link_short
-            episode['fields']['episode-apple-podcasts-link'] = apple_podcast_link[1]
-        
-        # Add Spotify link if found
-        if spotify_link:
-            episode['fields']['episode-spotify-link'] = spotify_link
-        
-        # Optional fields - add if needed
-        if hasattr(entry, 'itunes_duration'):
-            episode['fields']['duration'] = entry.itunes_duration
-            
-        # Get audio URL from enclosure
-        audio_url = next((link.href for link in entry.links if link.rel == 'enclosure'), None)
-        if audio_url:
-            episode['fields']['audio_url'] = audio_url
-            
-        # Add Goodpods link using episode number and title
-        if episode_number:
-            goodpods_link = get_goodpods_link(episode_number, entry.title)
-            episode['fields']['episode-goodpods-link'] = goodpods_link
-        
-        # Create thumbnail before returning episode
+
+        # Create and upload thumbnail
         try:
             logger.info("Creating episode thumbnail...")
             background_path = ASSETS_IMAGES_DIR / 'default_episode_background.png'
@@ -396,23 +374,36 @@ def get_latest_episode() -> Dict:
             # Create thumbnail with episode number formatted as "EP XX"
             thumbnail_text = f"{episode_number}"
             font_path = ASSETS_FONTS_DIR / "AbrilFatface-Regular.ttf"
-            created_thumbnail_path = create_thumbnail(
+            
+            # Create large version first
+            large_thumbnail_path = THUMBNAILS_DIR / f"{episode['fields']['slug']}_large{background_path.suffix}"
+            large_thumbnail_path = create_thumbnail(
                 text=thumbnail_text,
                 input_image_path=str(background_path),
-                output_name=episode['fields']['slug'],
+                output_name=f"{episode['fields']['slug']}_large",
                 font_size=225,
                 font_color="#FFFFFF",
-                font_path=str(font_path),  # Convert Path to string
+                font_path=str(font_path),
                 position=(420, 720)
             )
-            logger.info(f"Thumbnail created at {thumbnail_path}")
+            logger.info(f"Large thumbnail created at {large_thumbnail_path}")
             
-            # Upload thumbnail to Webflow
+            # Optimize the large thumbnail and save as regular version
+            optimized_path = optimize_image(
+                input_path=large_thumbnail_path,
+                output_path=thumbnail_path,
+                max_size=(540, 540),
+                quality=85,
+                format='PNG'
+            )
+            logger.info(f"Optimized thumbnail created at {optimized_path}")
+            
+            # Upload optimized thumbnail to Webflow
             logger.info("Uploading thumbnail to Webflow...")
             image_data = upload_image_to_webflow(
-                Path(created_thumbnail_path), 
+                Path(optimized_path), 
                 config,
-                alt_text=episode['fields']['name']  # Use episode name as alt text
+                alt_text=episode['fields']['name']
             )
             
             # Only update episode-main-image if upload succeeded
@@ -426,6 +417,21 @@ def get_latest_episode() -> Dict:
         except Exception as e:
             logger.error(f"Failed to create or upload thumbnail: {e}")
             raise PodcastSyncError(f"Thumbnail processing failed: {str(e)}")
+
+        # Add Apple Podcast links if available
+        if full_link:
+            episode['fields']['episode-apple-podcasts-link'] = full_link
+            if short_link:  # Add the short link for player if available
+                episode['fields']['apple-podcast-link-for-player'] = short_link
+            
+        # Add Spotify link if available  
+        if spotify_link:
+            episode['fields']['episode-spotify-link'] = spotify_link
+
+        # Add Goodpods link
+        if episode_number:
+            goodpods_link = get_goodpods_link(episode_number, entry.title)
+            episode['fields']['episode-anchor-link'] = goodpods_link
 
         return episode
         
