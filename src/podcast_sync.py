@@ -23,6 +23,7 @@ from media.make_thumbnail import create_thumbnail
 from webflow.upload_asset import upload_asset
 from utils.convert_md_to_html import convert_markdown_to_html
 from utils.optimize_image import optimize_image
+from ai.create_excerpt import create_excerpt
 
 # At the top of the file, after the imports, add:
 SCRIPT_DIR = Path(__file__).parent
@@ -316,7 +317,71 @@ def upload_image_to_webflow(image_path: Path, config: dict, alt_text: str) -> di
         logger.error(f"Failed to upload image to Webflow: {e}")
         raise
 
-def get_latest_episode() -> Dict:
+def generate_episode_excerpt(transcript: str, config: dict, verbose: bool = False) -> str:
+    """
+    Generate a concise excerpt from the episode transcript using AI.
+    
+    Args:
+        transcript: The episode transcript text
+        config: Application configuration
+        verbose: Whether to output additional debug information
+        
+    Returns:
+        A concise excerpt suitable for the episode listing, guaranteed not to exceed
+        the configured target length
+    """
+    try:
+        # Get excerpt configuration
+        excerpt_config = config.get('excerpt', {})
+        max_tokens = excerpt_config.get('max_input_tokens', 300)
+        target_length = excerpt_config.get('target_length', 73)
+        
+        # Split transcript into tokens and take configured amount
+        tokens = transcript.split()[:max_tokens]
+        
+        # Generate excerpt using AI
+        excerpt = create_excerpt(tokens, target_length, config)
+        
+        if verbose:
+            logger.info(f"Generated excerpt ({len(excerpt)} chars): '{excerpt}'")
+            # Save to debug file
+            debug_file = DEBUG_DIR / 'latest_excerpt.txt'
+            with open(debug_file, 'w', encoding='utf-8') as f:
+                f.write(f"Length: {len(excerpt)} characters\n\n{excerpt}")
+            logger.info(f"Saved excerpt to {debug_file}")
+            
+        return excerpt
+        
+    except Exception as e:
+        logger.error(f"Failed to generate excerpt: {e}")
+        # Fallback to simple truncation if AI generation fails
+        truncated = clean_html(transcript)[:target_length]
+        # Find last space before limit
+        last_space = truncated.rfind(' ')
+        if last_space > 0:
+            truncated = truncated[:last_space].rstrip()
+        # Add ellipsis if truncated mid-sentence
+        if truncated[-1] not in '.!?':
+            truncated = truncated.rstrip() + '...'
+        return truncated
+
+def clean_description(content: str) -> str:
+    """
+    Clean up the description by removing the support link and everything after it.
+    
+    Args:
+        content: The original description content
+        
+    Returns:
+        Cleaned description content
+    """
+    support_link = '<p><a href="https://www.paypal.com/donate/?hosted_button_id=Y23G2PFDRHTJS" rel="payment">Support the show</a></p>'
+    index = content.find(support_link)
+    if index != -1:
+        return content[:index].rstrip()
+    return content
+
+def get_latest_episode(verbose: bool = False) -> Dict:
     """Fetch and parse the latest episode from RSS feed"""
     config = load_config()
     
@@ -342,6 +407,7 @@ def get_latest_episode() -> Dict:
         # Get full content and process it
         full_content = entry.content[0].value if entry.content else entry.summary
         processed_content = process_episode_mentions(full_content, feed.entries)
+        cleaned_content = clean_description(processed_content)
         
         # Get Spotify link
         spotify_link = get_spotify_podcast_link(episode_number) if episode_number else None
@@ -352,9 +418,8 @@ def get_latest_episode() -> Dict:
                 'name': formatted_title,  # Episode Title with "Ep N:" format
                 'slug': generate_slug(entry.title),  # Episode Link (required)
                 'episode-number': episode_number,  # Episode - Number
-                'episode-description-excerpt': clean_html(entry.summary)[:73],  # Episode - Excerpt (required)
-                'description': processed_content,  # Description
-                'episode-description': processed_content,  # Episode - Episode Equity
+                'description': cleaned_content,  # Description
+                'episode-description': cleaned_content,  # Episode - Episode Equity
                 'episode-featured': True,  # Set featured to true for latest episode
                 'episode-color': config['default_episode_color'],  # Set default episode color from config
             }
@@ -558,14 +623,14 @@ def get_category_id(category_name: str, config: dict) -> str:
         logger.error(f"Error getting category ID: {e}")
         raise
 
-def main(debug_mode: bool = False):
+def main(debug_mode: bool = False, verbose: bool = False):
     """Create and publish the latest episode in Webflow"""
     try:
         config = load_config()
         
         # Get latest episode
         logger.info("Fetching latest episode from RSS feed...")
-        episode = get_latest_episode()
+        episode = get_latest_episode(verbose=verbose)
         logger.info(f"Found episode: {episode['fields']['name']}")
         
         # Download audio and get transcription
@@ -644,6 +709,13 @@ def main(debug_mode: bool = False):
                     # Add HTML transcript to episode fields
                     episode['fields']['episode-transcript'] = transcript_html
                     logger.info("HTML transcript added to episode fields")
+                    
+                    # Generate and add excerpt using the transcript
+                    logger.info("Generating episode excerpt...")
+                    excerpt = generate_episode_excerpt(transcript, config, verbose=debug_mode)
+                    episode['fields']['episode-description-excerpt'] = excerpt
+                    logger.info("Episode excerpt generated and added to fields")
+                    
                 except Exception as e:
                     logger.error(f"Failed to convert transcript to HTML: {e}")
                     raise
@@ -694,4 +766,5 @@ def main(debug_mode: bool = False):
 if __name__ == "__main__":
     # Check if debug mode is requested via command line argument
     debug_mode = "--debug" in sys.argv
-    main(debug_mode=debug_mode) 
+    verbose_mode = "--verbose" in sys.argv
+    main(debug_mode=debug_mode, verbose=verbose_mode) 

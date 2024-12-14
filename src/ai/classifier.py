@@ -1,3 +1,4 @@
+from openai import OpenAI
 from utils.log_setup import setup_project_logging
 logger = setup_project_logging()
 
