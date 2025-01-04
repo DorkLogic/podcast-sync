@@ -136,7 +136,7 @@ For optimal GPU performance with Whisper:
 
 1. Clone the repository:
    ```bash
-   git clone [repository-url]
+   git clone https://github.com/DorkLogic/podcast-sync
    cd podcast-sync
    ```
 
