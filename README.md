@@ -1,274 +1,436 @@
-# Podcast Sync Automation
+# Podcast Sync Automation Suite
+
+A comprehensive automation suite for managing podcast web presence, powered by AI for content generation and multi-platform distribution.
+
+[DIAGRAM PLACEHOLDER: High-level architecture showing the flow from RSS feed to Webflow CMS, including AI processing steps]
+
+```mermaid
+graph LR
+    A[RSS Feed] --> B[download_episode.py]
+    B --> C[Audio Processing]
+    C --> D[OpenAI Whisper]
+    D --> E[Transcript]
+    E --> F1[GPT-4 Q&A]
+    E --> F2[GPT-3.5 Summary]
+    B --> G[make_thumbnail.py]
+    F1 --> H[Webflow CMS]
+    F2 --> H
+    G --> H
+    H --> I[Platform Links]
+    I --> J1[Apple]
+    I --> J2[Spotify]
+    I --> J3[Goodpods]
+```
+
+### Workflow Overview
+
+The diagram above illustrates the automated pipeline:
+1. New episodes are detected from the RSS feed
+2. Audio is downloaded and processed in optimized chunks
+3. OpenAI Whisper generates transcripts from the audio
+4. GPT-4 creates Q&A content while GPT-3.5 generates summaries
+5. Custom thumbnails are generated in parallel
+6. All content is published to Webflow CMS
+7. Platform-specific links are generated and validated
 
 ## Overview
 
-`podcast_sync.py` automates the process of syncing podcast episodes from an RSS feed to a Webflow CMS collection. It includes transcription, Q&A generation, and thumbnail creation.
-
----
-
-## Podcast Retro Sync
-
-`src/podcast_retro_sync.py` is a utility script for retroactively processing existing podcast episodes. It:
-
-- **Processes episodes** that are missing transcripts or other content.
-- **Downloads and transcribes** episode audio using OpenAI's Whisper API.
-- **Generates AI-powered questions and answers** about each episode.
-- **Updates existing Webflow episodes** with:
-  - Episode transcripts.
-  - Q&A sections.
-  - Other missing content.
-
-### Features
-
-- **Batch Processing**: Processes episodes in batches (configurable via command line).
-- **Large File Handling**: Handles large audio files by processing initial segments.
-- **Automatic Publishing**: Automatically publishes updates to Webflow.
-- **Error Handling and Logging**: Includes robust error handling and logging.
-- **Debug Output**: Creates debug output in the `debug/audio/` directory.
-
----
-
-## Podcast Sync
-
-`src/podcast_sync.py` is the main script for processing and publishing new podcast episodes. It:
-
-- **Fetches the latest episode** from the RSS feed.
-- **Creates episode content** for Webflow, including:
-  - Episode title and description.
-  - Platform links (Apple Podcasts, Spotify, Goodpods).
-  - AI-generated transcript using OpenAI's Whisper API.
-  - AI-generated Q&A section about the episode.
-  - AI-classified episode category.
-  - Custom episode thumbnail.
-
-### Features
-
-- **Automatic Platform Link Generation**:
-  - Apple Podcasts.
-  - Spotify.
-  - Goodpods.
-- **AI-Powered Content Generation**:
-  - Episode transcription.
-  - Q&A generation.
-  - Category classification.
-- **Custom Thumbnail Generation**.
-- **Webflow Integration**:
-  - Automatic publishing.
-  - Asset management.
-  - Category management.
-
-### Usage
-
-**Normal mode** - Fetch and publish the latest episode:
-
-```bash
-python src/podcast_sync.py
-```
-
-**Debug mode** - Prepare content without publishing:
-
-```bash
-python src/podcast_sync.py --debug
-```
-
-The script creates debug output in various subdirectories under `debug/`:
-
-- `debug/audio/` - Episode audio and transcripts.
-- `debug/images/thumbnails/` - Generated episode thumbnails.
-- `debug/network/` - API request/response data.
-
----
-
-## Scheduled Run
-
-`src/scheduled_run.py` is an automated scheduler that monitors the podcast RSS feed for new episodes. It:
-
-- Runs at configurable intervals to check for new episodes.
-- Manages episode tracking to avoid duplicate processing.
-- Automatically triggers the podcast sync process when new episodes are found.
-
-### Features
-
-- **Configurable Scheduling**:
-  - Custom start time.
-  - Adjustable check intervals.
-  - Timezone support.
-- **Episode Tracking**:
-  - Maintains record of processed episodes in `episode_ids.jsonl`.
-  - Prevents duplicate processing.
-- **Automated Sync Triggering**:
-  - Automatically runs `podcast_sync.py` when new episodes are found.
-  - Handles errors and retries.
-- **Detailed Logging**:
-  - Logs all activities to `scheduled_log_runs.txt`.
-  - Console output for monitoring.
-
-### Configuration
-
-In `config.yaml`:
-
-```yaml
-schedule:
-  start_datetime: "2024-01-01 00:00:00"  # When to start checking
-  interval_minutes: 60                   # How often to check
-  timezone_offset: -5                    # GMT offset (e.g., -5 for EST)
-```
-
-Start the scheduler:
-
-```bash
-python src/scheduled_run.py
-```
-
----
-
-## Key Features
-
-### RSS Feed Integration
-
-- **Fetches episodes** from the Buzzsprout RSS feed.
-- **Extracts episode details**:
-  - Title.
-  - Number.
-  - Description.
-  - Audio URL.
-- **Cleans HTML** from descriptions.
-- **Formats episode titles** consistently.
-
-### Audio Processing
-
-- **Downloads episode audio files**.
-- **Transcribes audio** using OpenAI's Whisper API.
-- **Formats transcripts** as conversations between configured hosts.
-- **Generates HTML and Markdown** versions of transcripts.
-
-### AI-Powered Features
-
-- **Automatic episode categorization** using OpenAI.
-- **Generates Q&A pairs** from episode content.
-- **Formats Q&A content** for Webflow publishing.
-- **Conversation-style transcript formatting** with host names.
-
-### Image Generation
-
-- **Creates episode thumbnails** with episode numbers.
-- **Uploads thumbnails** to Webflow as assets.
-- **Supports custom background images**.
-- **Configurable text styling**.
-
-### Platform Link Generation
-
-- **Apple Podcasts**: Scrapes episode-specific links.
-- **Spotify**: Uses the Spotify API to retrieve episode links.
-- **Goodpods**: Generates links using episode number and title.
-
-### Webflow Integration
-
-- **Maps RSS feed data** to Webflow collection fields.
-- **Validates fields** against collection schema.
-- **Supports v2 Webflow API**.
-- **Handles asset uploads and management**.
-- **Debug mode** for testing without publishing.
-
----
-
-## Configuration
-
-Configuration is handled via `config.yaml` for:
-
-- **Webflow API credentials and collection IDs**.
-- **RSS feed URL**.
-- **Platform-specific settings**:
-  - Spotify API.
-  - Base URLs.
-- **OpenAI API configuration**.
-- **Host names and display preferences**.
-- **Default episode styling**.
-- **Directory paths and file locations**.
-
----
-
-## Debug Features
-
-- **Detailed logging** to `debug_log.txt`.
-- **Saves network requests and responses**.
-- **Debug mode** for testing without API calls.
-- **Stores intermediate files**:
-  - Transcripts.
-  - Q&A.
-  - Thumbnails.
-- **API response inspection tools**.
-
----
-
-## Directory Structure
-
-```
-├── assets/                   # Static assets used by the application
-│   ├── fonts/                # Font files
-│   └── images/               # Image templates and backgrounds
-│
-├── debug/                    # Debug output and logs
-│   ├── audio/                # Episode audio files and transcripts
-│   ├── images/               # Generated images
-│   │   └── thumbnails/       # Episode thumbnail images
-│   ├── network/              # API request/response logs
-│   └── *.json, *.txt, *.html # Various debug output files
-│
-├── src/                      # Source code
-│   ├── ai/                   # AI/ML related code
-│   ├── link_providers/       # Code for different podcast platforms
-│   ├── media/                # Media processing (audio, images)
-│   ├── utils/                # Utility functions
-│   ├── webflow/              # Webflow API integration
-│   └── *.py                  # Main application files
-│
-├── test/                     # Test files
-│   └── *.py                  # Test scripts for different components
-│
-├── config.yaml               # Main configuration (git-ignored)
-├── config.yaml.example       # Example configuration template
-└── requirements.txt          # Python dependencies
-```
-
----
+This project automates the end-to-end process of managing a podcast's web presence by:
+- Automatically syncing new episodes from RSS feeds to Webflow CMS
+- Generating AI-powered transcripts and Q&A content
+- Creating custom episode thumbnails
+- Managing multi-platform distribution (Apple, Spotify, Goodpods)
+- Supporting retroactive processing of existing episodes
 
 ## Requirements
 
-- **Python 3.x**
+- Python 3.9+ (3.11 recommended)
+- FFmpeg for audio processing
+- 16GB+ RAM recommended for large audio files
+  - Required for processing high-quality audio files (up to 200MB)
+  - Needed for Whisper's chunked audio processing (2GB per chunk)
+  - Used for large GPT context windows (up to 4GB)
+  - Handles parallel thumbnail generation and uploads
+- GPU optional (can accelerate Whisper transcription)
 
-- **Required Packages**:
-  - `requests>=2.31.0`
-  - `pyyaml>=6.0.1`
-  - `Pillow>=10.2.0`
-  - `markdown>=3.5.1`
-  - `openai`
-  - `feedparser`
-  - `beautifulsoup4`
+### GPU Setup Notes
+```python
+# Check CUDA availability
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"CUDA version: {torch.version.cuda}")
 
-- **Valid API Credentials**:
-  - Webflow API token.
-  - OpenAI API key.
-  - Spotify API credentials (optional).
+# Common CUDA/PyTorch version pairs:
+# CUDA 11.8 → torch 2.0.0+cu118
+# CUDA 12.1 → torch 2.1.0+cu121
 
----
-
-## Usage
-
-**Basic Usage**:
-
-```bash
-python src/podcast_sync.py
+# See compatibility matrix:
+# https://pytorch.org/get-started/locally/
 ```
 
----
+For optimal GPU performance with Whisper:
+- Install CUDA Toolkit 11.8+ ([NVIDIA docs](https://developer.nvidia.com/cuda-downloads))
+- Match PyTorch version to your CUDA version
+- Monitor GPU memory usage (8GB+ recommended)
+
+### Python Version Notes
+- Python 3.8: Not supported (uses newer async features)
+- Python 3.9-3.10: Fully supported
+- Python 3.11+: Recommended (better performance)
+- Python 3.12: Limited testing, may have compatibility issues
+
+## Key Features
+
+- **Automated Episode Processing**
+  - RSS feed monitoring for new episodes
+  - Audio file downloading and processing
+  - Custom thumbnail generation
+  - Platform link management (Apple, Spotify, Goodpods)
+
+- **AI-Powered Content Generation**
+  - Automated transcription using OpenAI Whisper
+  - Q&A generation from transcripts using GPT-4
+  - Episode summaries and excerpts
+  - Intelligent episode categorization
+
+- **Webflow CMS Integration**
+  - Automated content publishing
+  - Asset management
+  - Category organization
+  - Site-wide deployment controls
+
+## Project Structure
+
+```
+.
+├── src/
+│   ├── ai/                    # AI-powered content generation
+│   │   ├── transcribe_podcast.py
+│   │   ├── create_excerpt.py
+│   │   └── classifier.py
+│   ├── media/                 # Media processing
+│   │   ├── download_episode.py
+│   │   └── make_thumbnail.py
+│   ├── webflow/              # Webflow integration
+│   │   ├── publisher.py
+│   │   ├── categories.py
+│   │   └── upload_asset.py
+│   └── utils/                # Utility functions
+│       ├── config.py
+│       ├── text.py
+│       └── convert_md_to_html.py
+├── test/                     # Test suite
+├── debug/                    # Debug outputs (gitignored)
+├── config.yaml.example       # Configuration template
+├── requirements.txt          # Python dependencies
+└── README.md                # This file
+```
+
+## Installation & Setup
+
+1. Clone the repository:
+   ```bash
+   git clone [repository-url]
+   cd podcast-sync
+   ```
+
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Configure the application:
+   ```bash
+   cp config.yaml.example config.yaml
+   # Edit config.yaml with your credentials and settings
+   ```
+
+### Dependencies & Version Constraints
+
+Key dependencies and their version requirements:
+- `openai>=1.3.5`: Required for latest API features
+- `Pillow>=10.2.0`: For image processing
+- `pydub>=0.25.1`: Audio processing (requires FFmpeg)
+- Additional dependencies listed in `requirements.txt`
+
+For GPU acceleration:
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+### Required API Keys & Credentials
+
+You can provide credentials via environment variables or `config.yaml`. Environment variables take precedence.
+
+Environment Variables:
+```bash
+# Required
+export WEBFLOW_API_TOKEN="your_token"
+export OPENAI_API_KEY="your_key"
+export SPOTIFY_CLIENT_ID="your_id"
+export SPOTIFY_CLIENT_SECRET="your_secret"
+
+# Optional
+export YOUTUBE_API_KEY="your_key"
+export BUZZSPROUT_API_KEY="your_key"
+```
+
+### Configuration Override Behavior
+
+Environment variables always override `config.yaml` values. For example:
+
+```yaml
+# config.yaml
+webflow:
+  api_token: "config_token"  # Will be overridden if WEBFLOW_API_TOKEN exists
+  site_id: "site_123"        # No env var, this value will be used
+
+openai:
+  api_key: "config_key"      # Will be overridden if OPENAI_API_KEY exists
+  model: "gpt-4"            # No env var, this value will be used
+```
+
+⚠️ **Warning**: While `config.yaml` is ignored by default in `.gitignore` to prevent accidental commits, it's still recommended to use environment variables for secrets. This provides an additional layer of security and follows best practices for credential management.
+
+## Configuration
+
+The `config.yaml` file manages all settings and credentials. Here's a complete reference:
+
+### Required Configuration Keys
+```yaml
+webflow:
+  api_token: "YOUR_WEBFLOW_API_TOKEN"  # or use WEBFLOW_API_TOKEN env var
+  episode_collection_id: "required"
+  site_id: "required"
+
+openai:
+  api_key: "YOUR_OPENAI_API_KEY"  # or use OPENAI_API_KEY env var
+  model: "gpt-4-1106-preview"  # or "gpt-3.5-turbo" for lower cost
+
+rss:
+  feed_url: "required"
+
+hosts:
+  host1:
+    name: "required"
+    short_name: "required"
+  host2:
+    name: "required"
+    short_name: "required"
+```
+
+### Optional Configuration Keys
+```yaml
+spotify:
+  client_id: "optional"
+  client_secret: "optional"
+  show_id: "optional"
+
+youtube:
+  api_key: "optional"
+  channel_id: "optional"
+
+schedule:
+  interval_minutes: 60
+  timezone_offset: 0
+
+# See config.yaml.example for full reference
+```
+
+### AI Model Configuration
+
+Cost considerations for OpenAI models:
+- GPT-4 (default): Higher quality, higher cost (~$0.01/episode)
+  - Default model: `gpt-4-1106-preview` (latest as of 2024)
+  - Alternative: `gpt-4` (smaller context, lower cost)
+  - Check access: `openai api models list | grep gpt-4`
+- GPT-3.5: Lower quality, ~10x cheaper
+  - Default: `gpt-3.5-turbo-1106`
+  - Legacy: `gpt-3.5-turbo`
+- Whisper: Fixed cost per audio minute
+  - Default: `whisper-1` (only version available)
+
+To switch models, modify in config.yaml:
+```yaml
+openai:
+  model: "gpt-3.5-turbo-1106"  # Instead of "gpt-4-1106-preview"
+```
+
+## Usage Instructions
+
+### Common Flags (All Scripts)
+The following flags work with all main scripts:
+```bash
+--debug        Enable debug logging
+--verbose      Increase log verbosity
+--dry-run      Show what would be done
+--config PATH  Use alternative config file
+```
+
+### Processing New Episodes
+
+Run the main sync script:
+```bash
+python src/podcast_sync.py [options]
+
+Options:
+  --debug        Enable debug logging
+  --verbose      Increase log verbosity
+  --force        Force reprocess existing episodes
+  --retry N      Retry failed operations N times
+  --dry-run      Show what would be done without doing it
+```
+
+### Retroactive Processing
+
+Process existing episodes:
+```bash
+python src/podcast_retro_sync.py [options]
+
+Options:
+  --start-date YYYY-MM-DD    Process from date
+  --end-date YYYY-MM-DD      Process until date
+  --batch-size N             Process N episodes at once (default: 5)
+  --skip-existing            Skip episodes with transcripts
+  --force                    Reprocess even if exists
+  --retry N                  Retry failed operations
+```
+
+### Scheduling & Automation
+
+Example cron job for regular syncing:
+```bash
+# Check for new episodes every 6 hours
+0 */6 * * * cd /path/to/podcast-sync && source venv/bin/activate && python src/podcast_sync.py --retry 3
+
+# Daily cleanup of old debug files (keep last 7 days)
+0 0 * * * find /path/to/podcast-sync/debug -type f -mtime +7 -delete
+```
+
+Windows Task Scheduler example:
+```powershell
+# Create scheduled task (runs every 6 hours)
+$action = New-ScheduledTaskAction -Execute 'C:\podcast-sync\venv\Scripts\python.exe' -Argument 'C:\podcast-sync\src\podcast_sync.py --retry 3'
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 6)
+Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "PodcastSync" -Description "Sync new podcast episodes"
+```
+
+### Performance Optimization
+
+The suite uses several strategies to handle large files efficiently:
+
+1. **Chunked Audio Processing**
+   - Large audio files are processed in 25MB chunks
+   - Each chunk uses ~2GB RAM during transcription
+   - Parallel processing when GPU available
+
+2. **Memory Management**
+   ```python
+   # Example configuration for large files
+   whisper_config:
+     chunk_size: 25  # MB
+     batch_size: 8   # GPU only
+     max_retries: 3
+   ```
+
+3. **Resource Monitoring**
+   - Use `--debug` flag to see memory usage
+   - Check `debug/performance_log.txt` for metrics
+   - GPU memory stats in `debug/gpu_usage.log`
+
+## Error Handling & Troubleshooting
+
+Common errors and solutions:
+
+1. **Missing API Keys**
+   ```
+   Error: OPENAI_API_KEY not found
+   ```
+   - Check environment variables
+   - Verify config.yaml permissions and format
+
+2. **Invalid RSS Feed**
+   ```
+   Error: Failed to parse RSS feed
+   ```
+   - Verify feed URL in config.yaml
+   - Check internet connection
+   - Inspect debug/debug_rss.txt for feed content
+
+3. **Webflow Publish Failures**
+   ```
+   Error: Failed to publish to Webflow
+   ```
+   - Check API token permissions
+   - Verify collection IDs
+   - See debug/webflow_error.log for details
+
+### Logging
+
+Logs are stored in:
+- `debug/debug_log.txt`: Main application log
+- `debug/webflow_error.log`: Webflow-specific errors
+- `debug/openai_usage.log`: API usage and costs
+
+Increase logging detail:
+```bash
+python src/podcast_sync.py --debug --verbose
+```
 
 ## Testing
 
-Test scripts are available for:
+Run all tests:
+```bash
+pytest test/
+```
 
-- **Webflow API integration**.
-- **Platform link generation** (Apple, Spotify, Goodpods).
-- **RSS feed parsing**.
+Run specific test categories:
+```bash
+pytest test/test_webflow.py  # Webflow integration tests
+pytest test/test_ai/         # AI service tests
+pytest -k "transcribe"       # Run tests matching "transcribe"
+```
 
----
+Generate coverage report:
+```bash
+pytest --cov=src/ test/
+```
+
+### CI/CD Testing
+- GitHub Actions workflows in `.github/workflows/`
+- Automated tests run on pull requests
+- Coverage reports posted to PRs
+
+## License
+
+This project is licensed under the MIT License - see below for details:
+
+```
+MIT License
+
+Copyright (c) 2024 [Your Name/Organization]
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

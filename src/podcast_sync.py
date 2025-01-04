@@ -15,15 +15,17 @@ import base64
 from requests.exceptions import RequestException
 from pathlib import Path
 from media.download_episode import get_latest_episode_url, download_episode
-from media.transcribe_podcast import transcribe_audio_file, generate_questions
+from ai.transcribe_podcast import transcribe_audio_file, generate_questions
 from openai import OpenAI
-from ai.classifier import classify_episode_category
+from media.classifier import classify_episode_category
 from webflow.categories import get_categories
 from media.make_thumbnail import create_thumbnail
 from webflow.upload_asset import upload_asset
 from utils.convert_md_to_html import convert_markdown_to_html
 from utils.optimize_image import optimize_image
-from ai.create_excerpt import create_excerpt
+from media.create_excerpt import create_excerpt
+from webflow.publisher import publish_episode
+from utils.feed_parser import get_latest_episode
 
 # At the top of the file, after the imports, add:
 SCRIPT_DIR = Path(__file__).parent
@@ -381,6 +383,24 @@ def clean_description(content: str) -> str:
         return content[:index].rstrip()
     return content
 
+def truncate_filename(filename: str, max_length: int = 80) -> str:
+    """
+    Truncate a filename to a maximum length while preserving the extension.
+    
+    Args:
+        filename: The original filename
+        max_length: Maximum length for the filename (default: 80)
+        
+    Returns:
+        Truncated filename with original extension
+    """
+    name, ext = os.path.splitext(filename)
+    if len(filename) <= max_length:
+        return filename
+    # Leave room for the extension
+    max_name_length = max_length - len(ext)
+    return name[:max_name_length] + ext
+
 def get_latest_episode(verbose: bool = False) -> Dict:
     """Fetch and parse the latest episode from RSS feed"""
     config = load_config()
@@ -433,7 +453,9 @@ def get_latest_episode(verbose: bool = False) -> Dict:
                 logger.error(f"Background image not found at {background_path}")
                 raise PodcastSyncError("Background image for thumbnail not found")
                 
-            thumbnail_filename = f"{episode['fields']['slug']}{background_path.suffix}"
+            # Create filename and truncate if needed
+            base_filename = f"{episode['fields']['slug']}{background_path.suffix}"
+            thumbnail_filename = truncate_filename(base_filename)
             thumbnail_path = THUMBNAILS_DIR / thumbnail_filename
             
             # Create thumbnail with episode number formatted as "EP XX"
@@ -441,11 +463,13 @@ def get_latest_episode(verbose: bool = False) -> Dict:
             font_path = ASSETS_FONTS_DIR / "AbrilFatface-Regular.ttf"
             
             # Create large version first
-            large_thumbnail_path = THUMBNAILS_DIR / f"{episode['fields']['slug']}_large{background_path.suffix}"
+            large_base_filename = f"{episode['fields']['slug']}_large{background_path.suffix}"
+            large_thumbnail_filename = truncate_filename(large_base_filename)
+            large_thumbnail_path = THUMBNAILS_DIR / large_thumbnail_filename
             large_thumbnail_path = create_thumbnail(
                 text=thumbnail_text,
                 input_image_path=str(background_path),
-                output_name=f"{episode['fields']['slug']}_large",
+                output_name=os.path.splitext(large_thumbnail_filename)[0],  # Remove extension for create_thumbnail
                 font_size=225,
                 font_color="#FFFFFF",
                 font_path=str(font_path),
@@ -503,10 +527,21 @@ def get_latest_episode(verbose: bool = False) -> Dict:
     except Exception as e:
         raise PodcastSyncError(f"Failed to parse RSS feed: {str(e)}")
 
-def publish_to_webflow(episode: dict, config: dict, debug_mode: bool = False) -> Optional[dict]:
+def create_episode_in_webflow(episode: dict, config: dict, debug_mode: bool = False) -> Optional[dict]:
     """
-    Create and publish episode in Webflow collection
-    If debug_mode is True, only saves request body without making API call
+    Create a new episode in Webflow collection.
+    If debug_mode is True, only saves request body without making API call.
+    
+    Args:
+        episode: Episode data to create
+        config: Application configuration
+        debug_mode: If True, only save request body without making API call
+        
+    Returns:
+        Created item data from Webflow, or None if in debug mode
+        
+    Raises:
+        PodcastSyncError: If there's an error creating the episode
     """
     # Use v2 API endpoint with updated collection_id reference
     create_url = f'https://api.webflow.com/v2/collections/{config["webflow"]["episode_collection_id"]}/items'
@@ -750,11 +785,18 @@ def main(debug_mode: bool = False, verbose: bool = False):
             json.dump(episode, f, indent=2)
             
         # Create and publish episode in Webflow
-        result = publish_to_webflow(episode, config, debug_mode=debug_mode)
+        result = create_episode_in_webflow(episode, config, debug_mode=debug_mode)
         if debug_mode:
             logger.info("Debug mode: Request body saved without making API call")
         else:
-            logger.info(f"Successfully created and published episode with ID: {result.get('_id')}")
+            logger.info(f"Successfully created episode with ID: {result.get('_id')}")
+            # Publish the episode using the centralized publish function
+            try:
+                publish_episode(result['id'], config)
+                logger.info("Successfully published episode")
+            except Exception as e:
+                logger.error(f"Failed to publish episode: {e}")
+                # Continue execution as the episode was created successfully
         
     except PodcastSyncError as e:
         logger.error(str(e))

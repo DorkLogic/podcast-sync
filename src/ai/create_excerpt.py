@@ -18,7 +18,7 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
         config: Application configuration containing OpenAI settings
         
     Returns:
-        A string containing the generated excerpt, truncated to desired_length if necessary
+        A string containing the generated excerpt, guaranteed not to exceed desired_length
         
     Raises:
         ExcerptGenerationError: If generation fails or input is invalid
@@ -43,7 +43,7 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
         - DO NOT directly quote or copy dialogue from the source
         - Write in third person, descriptive style
         - Focus on the key information or insight being discussed
-        - Keep it under {desired_length} characters
+        - Keep it STRICTLY under {desired_length} characters (including punctuation and spaces)
         - Make it engaging and informative for potential listeners
         - Use clear, concise language
         - Return only the generated summary text
@@ -73,9 +73,15 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
             last_space = excerpt.rfind(' ')
             if last_space > 0:
                 excerpt = excerpt[:last_space].rstrip()
-            # Add ellipsis if we truncated mid-sentence
-            if excerpt[-1] not in '.!?':
+            # Add ellipsis if we truncated mid-sentence and have room
+            if excerpt[-1] not in '.!?' and len(excerpt) <= desired_length - 3:
                 excerpt = excerpt.rstrip() + '...'
+            # Final length check - if still too long, remove characters until we're under the limit
+            while len(excerpt) > desired_length:
+                if excerpt.endswith('...'):
+                    excerpt = excerpt[:-4].rstrip() + '...'
+                else:
+                    excerpt = excerpt[:-1].rstrip()
                 
         return excerpt
         

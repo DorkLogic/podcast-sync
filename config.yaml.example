@@ -5,6 +5,12 @@ webflow:
   category_collection_id: "YOUR_CATEGORY_COLLECTION_ID"
   site_id: "YOUR_SITE_ID"
 
+# YouTube Configuration
+youtube:
+  api_key: "YOUR_YOUTUBE_API_KEY"
+  channel_id: "YOUR_YOUTUBE_CHANNEL_ID"
+  search_prefix: "YOUR_SEARCH_PREFIX"  # This prefix helps find specific episodes
+
 # RSS Feed Configuration
 rss:
   feed_url: "YOUR_RSS_FEED_URL"
@@ -18,7 +24,7 @@ spotify:
   client_id: "YOUR_SPOTIFY_CLIENT_ID"
   client_secret: "YOUR_SPOTIFY_CLIENT_SECRET"
   show_id: "YOUR_SPOTIFY_SHOW_ID"
-  default_episode_id: "YOUR_DEFAULT_EPISODE_ID"  # optional
+  default_episode_id: "optional-default-episode-id"
 
 # goodpods Configuration
 goodPods:
@@ -59,3 +65,12 @@ text_replacements:
     correct: "Market MakeHer"
   - wrong: "market makeher"
     correct: "Market MakeHer"
+  - wrong: "YOUR_WRONG_TEXT"
+    correct: "YOUR_CORRECT_TEXT"
+
+# Excerpt generation settings
+excerpt:
+  # Maximum number of tokens to use from transcript for generating excerpt
+  max_input_tokens: 30000
+  # Target length of the generated excerpt in characters
+  target_length: 73

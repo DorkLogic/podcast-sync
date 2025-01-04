@@ -8,6 +8,7 @@ import logging
 import sys
 from pathlib import Path
 from utils.log_setup import setup_project_logging
+from utils.first_rss import dump_rss_feed
 
 # Define directory paths
 SCRIPT_DIR = Path(__file__).parent

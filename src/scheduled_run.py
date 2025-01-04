@@ -9,6 +9,7 @@ from datetime import datetime
 import subprocess
 from typing import Set, Dict
 import pytz
+from utils.feed_parser import get_latest_episode
 
 # Configure logging
 logging.basicConfig(

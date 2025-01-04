@@ -133,3 +133,45 @@ def publish_to_webflow(episode: dict, config: dict) -> dict:
             logger.error(f"Response Body: {create_response.text}")
             logger.error(f"Request body sent: {json.dumps(request_body, indent=2)}")
         raise WebflowPublishError(f"Webflow API error: {str(e)}") 
+
+def publish_episode(episode_id: str, config: dict) -> None:
+    """
+    Publish a specific episode in Webflow CMS
+    
+    Args:
+        episode_id: The ID of the episode to publish
+        config: Application configuration containing Webflow settings
+        
+    Raises:
+        WebflowPublishError: If there's an error publishing the episode
+    """
+    url = f'https://api.webflow.com/v2/collections/{config["webflow"]["episode_collection_id"]}/items/publish'
+    
+    headers = {
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'authorization': f'Bearer {config["webflow"]["api_token"]}',
+    }
+    
+    data = {
+        "itemIds": [episode_id]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 429:
+            logger.warning("Hit rate limit when publishing. Please try publishing manually.")
+            return
+        response.raise_for_status()
+        
+        result = response.json()
+        if result.get('errors'):
+            logger.warning(f"Some errors occurred during publishing: {result['errors']}")
+            raise WebflowPublishError(f"Publishing errors: {result['errors']}")
+        else:
+            logger.info("Successfully published episode")
+            
+    except Exception as e:
+        error_msg = f"Failed to publish episode (changes were still saved): {e}"
+        logger.warning(error_msg)
+        raise WebflowPublishError(error_msg) 

@@ -7,9 +7,9 @@ import requests
 import yaml
 from openai import OpenAI
 from media.download_episode import download_episode
-from media.transcribe_podcast import transcribe_audio_file, generate_questions
+from ai.transcribe_podcast import transcribe_audio_file, generate_questions
 from utils.convert_md_to_html import convert_markdown_to_html
-import feedparser
+from utils.feed_parser import get_latest_episode
 from webflow.publisher import publish_site
 
 # Setup paths
