@@ -121,6 +121,12 @@ For optimal GPU performance with Whisper:
 │       └── convert_md_to_html.py
 ├── test/                     # Test suite
 ├── debug/                    # Debug outputs (gitignored)
+├── assets/                   # Static assets for the application
+│   ├── images/              # Image resources
+│   │   └── default_episode_background.png
+│   └── fonts/               # Font resources
+│       ├── AbrilFatface-Regular.ttf
+│       └── NotoSans-BoldItalic.ttf
 ├── config.yaml.example       # Configuration template
 ├── requirements.txt          # Python dependencies
 └── README.md                # This file
@@ -434,3 +440,24 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Assets
+
+The `assets/` directory contains essential resources used by the application:
+
+### Images
+- `images/default_episode_background.png`: Default background image used for generating episode thumbnails
+  - Used by the thumbnail generation system
+  - Required for creating episode artwork
+  - Resolution and format must be maintained for consistent output
+
+### Fonts
+- `fonts/AbrilFatface-Regular.ttf`: Primary font for episode numbers in thumbnails
+- `fonts/NotoSans-BoldItalic.ttf`: Supporting font for additional text elements
+
+These assets are critical for:
+- Thumbnail generation for episodes
+- Maintaining consistent branding across episodes
+- Ensuring visual quality in the podcast's web presence
+
+⚠️ **Note**: Do not delete or modify these assets as they are required for proper functioning of the thumbnail generation system.
