@@ -14,18 +14,18 @@ from bs4 import BeautifulSoup
 import base64
 from requests.exceptions import RequestException
 from pathlib import Path
-from media.download_episode import get_latest_episode_url, download_episode
-from ai.transcribe_podcast import transcribe_audio_file, generate_questions
-from openai import OpenAI
-from media.classifier import classify_episode_category
-from webflow.categories import get_categories
-from media.make_thumbnail import create_thumbnail
-from webflow.upload_asset import upload_asset
+from utils.feed_parser import get_latest_episode
+from ai.classifier import classify_episode_category
 from utils.convert_md_to_html import convert_markdown_to_html
 from utils.optimize_image import optimize_image
-from media.create_excerpt import create_excerpt
+from openai import OpenAI
+from media.download_episode import get_latest_episode_url, download_episode
+from ai.transcribe_podcast import transcribe_audio_file, generate_questions
+from media.make_thumbnail import create_thumbnail
+from webflow.upload_asset import upload_asset
+from ai.create_excerpt import create_excerpt
 from webflow.publisher import publish_episode
-from utils.feed_parser import get_latest_episode
+from webflow.categories import get_categories
 
 # At the top of the file, after the imports, add:
 SCRIPT_DIR = Path(__file__).parent

@@ -33,30 +33,30 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
         client = OpenAI(api_key=config['openai']['api_key'])
         
         prompt = f"""
-        Create a brief, engaging summary that captures the essence of this podcast episode moment.
-        The summary MUST be no longer than {desired_length} characters.
+        Create a complete, SEO-friendly podcast episode description that will attract listeners.
+        The description MUST be exactly {desired_length} characters or less.
         
         Using these key phrases as context: {', '.join(tokens)}
         
         Requirements:
-        - Create an original summary that captures the main point or highlight
-        - DO NOT directly quote or copy dialogue from the source
-        - Write in third person, descriptive style
-        - Focus on the key information or insight being discussed
-        - Keep it STRICTLY under {desired_length} characters (including punctuation and spaces)
-        - Make it engaging and informative for potential listeners
-        - Use clear, concise language
-        - Return only the generated summary text
+        1. Write a COMPLETE sentence or thought - never end mid-sentence
+        2. Focus on the main value or insight listeners will gain
+        3. Use active, engaging language that makes people want to listen
+        4. Include specific topics or themes being discussed
+        5. Keep it EXACTLY {desired_length} characters or less (including punctuation and spaces)
+        6. Make it work well for podcast directories and search
+        7. Use clear, professional language
+        8. Return only the generated description text
         
-        Example style (but with different content):
-        "Exploring the impact of AI on modern healthcare systems and patient care..."
-        "A fascinating look at how urban planning shapes community well-being..."
+        Example format (but with different content):
+        "Expert insights on scaling SaaS businesses through strategic partnerships and AI automation."
+        "Breaking down the latest fintech trends and their impact on retail banking and investments."
         """
         
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are an expert at creating concise, informative summaries while avoiding direct quotes."},
+                {"role": "system", "content": "You are an expert at writing engaging, complete podcast descriptions that work well for SEO and discovery."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
