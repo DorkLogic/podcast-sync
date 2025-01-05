@@ -14,6 +14,8 @@ youtube:
 # RSS Feed Configuration
 rss:
   feed_url: "YOUR_RSS_FEED_URL"
+  last_processed_file: "debug/last_published_time.txt"  # File to store last processed timestamp
+  poll_log_file: "debug/rss_poll.log"  # Log file for RSS polling activity
 
 # Apple Podcast Configuration
 apple_podcast:
