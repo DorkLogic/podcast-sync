@@ -32,6 +32,9 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
     try:
         client = OpenAI(api_key=config['openai']['api_key'])
         
+        # Take only first 1000 tokens to stay well under context limit
+        tokens = tokens[:1000]
+        
         prompt = f"""
         Create a complete, SEO-friendly podcast episode description that will attract listeners.
         The description MUST be exactly {desired_length} characters or less.
@@ -54,7 +57,7 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
         """
         
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-1106-preview",  # Using GPT-4 for better quality
             messages=[
                 {"role": "system", "content": "You are an expert at writing engaging, complete podcast descriptions that work well for SEO and discovery."},
                 {"role": "user", "content": prompt}

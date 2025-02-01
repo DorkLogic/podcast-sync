@@ -145,7 +145,7 @@ def publish_episode(episode_id: str, config: dict) -> None:
     Raises:
         WebflowPublishError: If there's an error publishing the episode
     """
-    url = f'https://api.webflow.com/v2/collections/{config["webflow"]["episode_collection_id"]}/items/publish'
+    url = f'https://api.webflow.com/v2/sites/{config["webflow"]["site_id"]}/publish'
     
     headers = {
         'accept': 'application/json',
@@ -153,25 +153,32 @@ def publish_episode(episode_id: str, config: dict) -> None:
         'authorization': f'Bearer {config["webflow"]["api_token"]}',
     }
     
-    data = {
-        "itemIds": [episode_id]
-    }
-    
     try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 429:
-            logger.warning("Hit rate limit when publishing. Please try publishing manually.")
-            return
-        response.raise_for_status()
+        # Prepare publish data according to API spec
+        publish_data = {
+            "publishToWebflowSubdomain": True  # Ensure changes are published to Webflow subdomain
+        }
         
-        result = response.json()
-        if result.get('errors'):
-            logger.warning(f"Some errors occurred during publishing: {result['errors']}")
-            raise WebflowPublishError(f"Publishing errors: {result['errors']}")
-        else:
-            logger.info("Successfully published episode")
+        # If custom domains are configured, include them
+        if "custom_domains" in config["webflow"]:
+            publish_data["customDomains"] = config["webflow"]["custom_domains"]
+        
+        logger.info("Publishing site changes...")
+        publish_response = requests.post(url, headers=headers, json=publish_data)
+        
+        # Handle rate limit (1 publish per minute)
+        if publish_response.status_code == 429:
+            logger.warning("Hit rate limit when publishing. Please wait one minute before retrying.")
+            raise WebflowPublishError("Publishing rate limit exceeded (1 publish per minute)")
+            
+        publish_response.raise_for_status()
+        
+        logger.info("Successfully published episode")
             
     except Exception as e:
         error_msg = f"Failed to publish episode (changes were still saved): {e}"
+        if 'publish_response' in locals():
+            logger.error(f"Response Status: {publish_response.status_code}")
+            logger.error(f"Response Body: {publish_response.text}")
         logger.warning(error_msg)
         raise WebflowPublishError(error_msg) 
