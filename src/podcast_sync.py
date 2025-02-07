@@ -440,6 +440,7 @@ def get_latest_episode(verbose: bool = False) -> Dict:
                 'episode-number': episode_number,  # Episode - Number
                 'description': cleaned_content,  # Description
                 'episode-description': cleaned_content,  # Episode - Episode Equity
+                'episode-description-excerpt': clean_html(entry.summary)[:73],  # Initial excerpt from RSS
                 'episode-featured': True,  # Set featured to true for latest episode
                 'episode-color': config['default_episode_color'],  # Set default episode color from config
             }
@@ -681,6 +682,18 @@ def main(debug_mode: bool = False, verbose: bool = False):
             logger.info(f"Downloading episode audio to {output_path}")
             download_episode(episode_url, output_path)
             logger.info("Audio download complete")
+
+            # Check file size and compress if needed
+            file_size_mb = output_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > 25:
+                logger.info(f"Audio file size ({file_size_mb:.2f}MB) exceeds OpenAI's 25MB limit, compressing...")
+                try:
+                    from media.audio_processor import compress_audio
+                    output_path = compress_audio(output_path, max_size_mb=25)
+                    logger.info(f"Compressed audio saved to {output_path}")
+                except Exception as e:
+                    logger.error(f"Failed to compress audio: {e}")
+                    raise
 
             # Initialize OpenAI client and get transcription
             logger.info("Starting audio transcription...")

@@ -46,12 +46,75 @@ This project automates the end-to-end process of managing a podcast's web presen
 
 - Python 3.9+ (3.11 recommended)
 - FFmpeg for audio processing
+  - Windows: Install via `winget install -e --id Gyan.FFmpeg`
+  - macOS: Install via `brew install ffmpeg`
+  - Linux: Install via `apt-get install ffmpeg`
 - 16GB+ RAM recommended for large audio files
   - Required for processing high-quality audio files (up to 200MB)
   - Needed for Whisper's chunked audio processing (2GB per chunk)
   - Used for large GPT context windows (up to 4GB)
   - Handles parallel thumbnail generation and uploads
 - GPU optional (can accelerate Whisper transcription)
+
+### Audio Processing
+
+The suite automatically handles audio file compression to meet OpenAI's 25MB limit:
+- Uses FFmpeg for high-quality audio compression
+- Automatically calculates optimal bitrate based on duration
+- Maintains audio quality while reducing file size
+- Includes safety margins to ensure size limits
+- Cleans up temporary files automatically
+
+### Environment Setup
+
+1. **Install Python Dependencies**
+```bash
+pip install -r requirements.txt
+python -m spacy download en_core_web_lg  # Required for content analysis
+```
+
+2. **Install FFmpeg**
+- Windows:
+  ```powershell
+  winget install -e --id Gyan.FFmpeg
+  # Restart your terminal after installation
+  ```
+- macOS:
+  ```bash
+  brew install ffmpeg
+  ```
+- Linux:
+  ```bash
+  sudo apt-get update
+  sudo apt-get install ffmpeg
+  ```
+
+3. **Verify FFmpeg Installation**
+```bash
+ffmpeg -version
+ffprobe -version
+```
+
+4. **Configure API Keys**
+Copy `config.yaml.example` to `config.yaml` and fill in:
+```yaml
+openai:
+  api_key: "YOUR_OPENAI_API_KEY"  # Required for transcription
+webflow:
+  api_token: "YOUR_WEBFLOW_API_TOKEN"
+  episode_collection_id: "YOUR_COLLECTION_ID"
+```
+
+5. **Test Audio Processing**
+```bash
+# Test audio compression
+python src/media/audio_processor.py test.mp3
+
+# Expected output:
+# - Compressed file under 25MB
+# - Original quality preserved
+# - Automatic cleanup of temp files
+```
 
 ### GPU Setup Notes
 ```python
