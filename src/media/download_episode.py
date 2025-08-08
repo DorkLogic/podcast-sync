@@ -7,6 +7,7 @@ import feedparser
 import requests
 from pathlib import Path
 from utils.log_setup import setup_project_logging
+from utils.text import sanitize_filename
 
 # Define directory paths
 SCRIPT_DIR = Path(__file__).parent
@@ -85,7 +86,8 @@ def main():
         logger.info(f"Latest episode URL: {episode_url}")
         
         # Create clean filename from episode title
-        clean_filename = f"ep-{episode_title.split('.')[0].split('-')[0].strip()}.mp3"
+        safe_title = sanitize_filename(episode_title)
+        clean_filename = f"ep-{safe_title}.mp3"
         output_path = audio_dir / clean_filename
         
         # Download the episode if needed

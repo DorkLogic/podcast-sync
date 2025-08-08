@@ -12,11 +12,11 @@ class WebflowPublishError(Exception):
 
 def publish_site(config: dict) -> None:
     """
-    Publish the Webflow site using deployments endpoint
+    Publish the Webflow site using the publish endpoint
     Args:
         config: Application configuration containing Webflow settings
     """
-    url = f'https://api.webflow.com/v2/sites/{config["webflow"]["site_id"]}/deployments'
+    url = f'https://api.webflow.com/v2/sites/{config["webflow"]["site_id"]}/publish'
     
     headers = {
         'accept': 'application/json',
@@ -25,27 +25,23 @@ def publish_site(config: dict) -> None:
     }
     
     try:
-        # Create a deployment
-        logger.info("Creating site deployment...")
-        
-        data = {
-            "status": "staged"  # First stage the changes
+        # Prepare publish data according to API spec
+        publish_data = {
+            "publishToWebflowSubdomain": True  # Ensure changes are published to Webflow subdomain
         }
         
-        # Create deployment
-        deploy_response = requests.post(url, headers=headers, json=data)
-        deploy_response.raise_for_status()
-        deployment = deploy_response.json()
-        deployment_id = deployment.get('id')
+        # If custom domains are configured, include them
+        if "custom_domains" in config.get("webflow", {}):
+            publish_data["customDomains"] = config["webflow"]["custom_domains"]
         
-        if not deployment_id:
-            raise WebflowPublishError("No deployment ID returned")
+        logger.info("Publishing site changes...")
+        publish_response = requests.post(url, headers=headers, json=publish_data)
+        
+        # Handle rate limit (1 publish per minute)
+        if publish_response.status_code == 429:
+            logger.warning("Hit rate limit when publishing. Please wait one minute before retrying.")
+            raise WebflowPublishError("Publishing rate limit exceeded (1 publish per minute)")
             
-        # Publish the deployment
-        publish_url = f'{url}/{deployment_id}/publish'
-        logger.info(f"Publishing deployment {deployment_id}...")
-        
-        publish_response = requests.post(publish_url, headers=headers)
         publish_response.raise_for_status()
         
         logger.info("Site published successfully")
@@ -54,8 +50,6 @@ def publish_site(config: dict) -> None:
         logger.error(f"Failed to publish site: {e}")
         if 'publish_response' in locals() and hasattr(publish_response, 'text'):
             logger.error(f"Publish Response: {publish_response.text}")
-        if 'deploy_response' in locals() and hasattr(deploy_response, 'text'):
-            logger.error(f"Deploy Response: {deploy_response.text}")
         raise WebflowPublishError(f"Failed to publish site: {str(e)}")
 
 def publish_to_webflow(episode: dict, config: dict) -> dict:

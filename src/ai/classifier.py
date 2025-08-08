@@ -19,7 +19,11 @@ def classify_episode_category(text: str, categories: list, config: dict) -> str:
         Selected category name
     """
     try:
-        client = OpenAI(api_key=config['openai']['api_key'])
+        client = OpenAI(
+            api_key=config['openai']['api_key'],
+            timeout=60.0,  # Default 60 second timeout
+            max_retries=2  # Retry failed requests up to 2 times
+        )
         
         prompt = f"""
         Given the following podcast episode title and list of categories, determine the most appropriate category.
@@ -38,7 +42,8 @@ def classify_episode_category(text: str, categories: list, config: dict) -> str:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
-            max_tokens=50
+            max_tokens=50,
+            timeout=90  # 90 second timeout for classification
         )
         
         category = response.choices[0].message.content.strip()

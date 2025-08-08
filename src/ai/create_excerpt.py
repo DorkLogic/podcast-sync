@@ -30,7 +30,11 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
         raise ExcerptGenerationError("Desired length must be at least 10 characters")
     
     try:
-        client = OpenAI(api_key=config['openai']['api_key'])
+        client = OpenAI(
+            api_key=config['openai']['api_key'],
+            timeout=60.0,  # Default 60 second timeout
+            max_retries=2  # Retry failed requests up to 2 times
+        )
         
         # Take only first 1000 tokens to stay well under context limit
         tokens = tokens[:1000]
@@ -63,7 +67,8 @@ def create_excerpt(tokens: List[str], desired_length: int, config: dict) -> str:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=200
+            max_tokens=200,
+            timeout=120  # 2 minute timeout for excerpt generation
         )
         
         excerpt = response.choices[0].message.content.strip()

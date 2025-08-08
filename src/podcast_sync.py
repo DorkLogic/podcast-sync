@@ -26,6 +26,7 @@ from webflow.upload_asset import upload_asset
 from ai.create_excerpt import create_excerpt
 from webflow.publisher import publish_episode
 from webflow.categories import get_categories
+from utils.text import sanitize_filename
 
 # At the top of the file, after the imports, add:
 SCRIPT_DIR = Path(__file__).parent
@@ -43,12 +44,39 @@ IMAGES_DIR.mkdir(exist_ok=True)
 THUMBNAILS_DIR.mkdir(exist_ok=True)
 
 # Configure logging to write to both file and console
+# Create a stream handler with UTF-8 encoding for Windows console
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+# For Windows, we need to ensure the console can handle Unicode
+if sys.platform == 'win32':
+    import locale
+    import codecs
+    # Try to set UTF-8 mode for Windows console
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    # Also wrap the stream handler to handle encoding errors gracefully
+    class SafeStreamHandler(logging.StreamHandler):
+        def emit(self, record):
+            try:
+                msg = self.format(record)
+                stream = self.stream
+                # Replace problematic Unicode characters with safe alternatives
+                msg = msg.encode('utf-8', errors='replace').decode('utf-8')
+                stream.write(msg + self.terminator)
+                self.flush()
+            except Exception:
+                self.handleError(record)
+    
+    stream_handler = SafeStreamHandler(sys.stdout)
+    stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(DEBUG_DIR / 'debug_log.txt'),
-        logging.StreamHandler(sys.stdout)
+        logging.FileHandler(DEBUG_DIR / 'debug_log.txt', encoding='utf-8'),
+        stream_handler
     ]
 )
 logger = logging.getLogger(__name__)
@@ -383,23 +411,7 @@ def clean_description(content: str) -> str:
         return content[:index].rstrip()
     return content
 
-def truncate_filename(filename: str, max_length: int = 80) -> str:
-    """
-    Truncate a filename to a maximum length while preserving the extension.
-    
-    Args:
-        filename: The original filename
-        max_length: Maximum length for the filename (default: 80)
-        
-    Returns:
-        Truncated filename with original extension
-    """
-    name, ext = os.path.splitext(filename)
-    if len(filename) <= max_length:
-        return filename
-    # Leave room for the extension
-    max_name_length = max_length - len(ext)
-    return name[:max_name_length] + ext
+# Removed truncate_filename - now using sanitize_filename from utils.text instead
 
 def get_latest_episode(verbose: bool = False) -> Dict:
     """Fetch and parse the latest episode from RSS feed"""
@@ -454,9 +466,9 @@ def get_latest_episode(verbose: bool = False) -> Dict:
                 logger.error(f"Background image not found at {background_path}")
                 raise PodcastSyncError("Background image for thumbnail not found")
                 
-            # Create filename and truncate if needed
+            # Create filename and sanitize it
             base_filename = f"{episode['fields']['slug']}{background_path.suffix}"
-            thumbnail_filename = truncate_filename(base_filename)
+            thumbnail_filename = sanitize_filename(base_filename)
             thumbnail_path = THUMBNAILS_DIR / thumbnail_filename
             
             # Create thumbnail with episode number formatted as "EP XX"
@@ -465,7 +477,7 @@ def get_latest_episode(verbose: bool = False) -> Dict:
             
             # Create large version first
             large_base_filename = f"{episode['fields']['slug']}_large{background_path.suffix}"
-            large_thumbnail_filename = truncate_filename(large_base_filename)
+            large_thumbnail_filename = sanitize_filename(large_base_filename)
             large_thumbnail_path = THUMBNAILS_DIR / large_thumbnail_filename
             large_thumbnail_path = create_thumbnail(
                 text=thumbnail_text,
@@ -676,28 +688,43 @@ def main(debug_mode: bool = False, verbose: bool = False):
             audio_dir = DEBUG_DIR / 'audio'
             audio_dir.mkdir(exist_ok=True)
             
-            clean_filename = f"ep-{episode_title.split('.')[0].split('-')[0].strip()}.mp3"
+            # Sanitize the episode title for use in filename
+            safe_title = sanitize_filename(episode_title)
+            clean_filename = f"ep-{safe_title}.mp3"
             output_path = audio_dir / clean_filename
             
             logger.info(f"Downloading episode audio to {output_path}")
             download_episode(episode_url, output_path)
             logger.info("Audio download complete")
 
-            # Check file size and compress if needed
-            file_size_mb = output_path.stat().st_size / (1024 * 1024)
-            if file_size_mb > 25:
-                logger.info(f"Audio file size ({file_size_mb:.2f}MB) exceeds OpenAI's 25MB limit, compressing...")
+            # Check file size and optimize if needed
+            original_size_mb = output_path.stat().st_size / (1024 * 1024)
+            logger.info(f"Original audio file size: {original_size_mb:.2f}MB")
+            
+            # Speed-up will reduce file size by ~50%, so use it as primary optimization
+            if original_size_mb > 12.5:  # If >12.5MB, speed-up will likely get us under 25MB
+                logger.info("File is large enough to benefit from speed-up optimization")
+                # Speed-up happens automatically in transcribe_audio_file if enabled in config
+            
+            # Only use compression as fallback for very large files that speed-up can't handle
+            if original_size_mb > 50:  # Only compress very large files (>50MB)
+                logger.info(f"Very large file ({original_size_mb:.2f}MB), using compression as additional optimization...")
                 try:
                     from media.audio_processor import compress_audio
                     output_path = compress_audio(output_path, max_size_mb=25)
-                    logger.info(f"Compressed audio saved to {output_path}")
+                    compressed_size_mb = output_path.stat().st_size / (1024 * 1024)
+                    logger.info(f"Pre-compressed audio: {original_size_mb:.2f}MB → {compressed_size_mb:.2f}MB")
                 except Exception as e:
-                    logger.error(f"Failed to compress audio: {e}")
-                    raise
+                    logger.warning(f"Compression failed, relying on speed-up optimization: {e}")
+                    # Continue with original file - speed-up should still help
 
             # Initialize OpenAI client and get transcription
             logger.info("Starting audio transcription...")
-            client = OpenAI(api_key=config['openai']['api_key'])
+            client = OpenAI(
+                api_key=config['openai']['api_key'],
+                timeout=60.0,  # Default 60 second timeout
+                max_retries=2  # Retry failed requests up to 2 times
+            )
             transcript = transcribe_audio_file(client, str(output_path), config)
             
             # Generate questions and answers if they don't exist

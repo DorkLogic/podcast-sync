@@ -30,7 +30,6 @@ def compress_audio(input_path: Path, max_size_mb: int = 25) -> Path:
             
         logger.info(f"Compressing audio file from {file_size:.2f}MB to target {max_size_mb}MB")
         
-        # Calculate target bitrate (kbps) with a safety margin
         # Get audio duration using ffprobe
         duration_cmd = [
             'ffprobe', 
@@ -41,34 +40,129 @@ def compress_audio(input_path: Path, max_size_mb: int = 25) -> Path:
         ]
         
         duration = float(subprocess.check_output(duration_cmd).decode().strip())
-        target_size_bytes = max_size_mb * 1024 * 1024 * 0.95  # 5% safety margin
-        target_bitrate = int((target_size_bytes * 8) / duration / 1000)
         
-        logger.info(f"Compressing with target bitrate: {target_bitrate}kbps")
+        # Progressive compression attempts with different strategies
+        compression_attempts = [
+            # First attempt: Standard VBR compression with calculated bitrate
+            {
+                'strategy': 'vbr_bitrate',
+                'safety_margin': 0.95,
+                'params': lambda bitrate: ['-b:a', f'{bitrate}k', '-acodec', 'libmp3lame']
+            },
+            # Second attempt: More aggressive VBR with quality setting
+            {
+                'strategy': 'vbr_quality',
+                'safety_margin': 0.90,
+                'params': lambda _: ['-q:a', '5', '-acodec', 'libmp3lame']  # Quality 5 (0=best, 9=worst)
+            },
+            # Third attempt: Most aggressive compression
+            {
+                'strategy': 'max_compression',
+                'safety_margin': 0.85,
+                'params': lambda _: ['-q:a', '7', '-compression_level', '9', '-acodec', 'libmp3lame']
+            }
+        ]
         
-        # Use FFmpeg for compression with the calculated bitrate
-        compress_cmd = [
+        for attempt_num, compression in enumerate(compression_attempts, 1):
+            try:
+                if output_path.exists():
+                    os.unlink(output_path)
+                    
+                target_size_bytes = max_size_mb * 1024 * 1024 * compression['safety_margin']
+                
+                if compression['strategy'] == 'vbr_bitrate':
+                    target_bitrate = int((target_size_bytes * 8) / duration / 1000)
+                    logger.info(f"Attempt {attempt_num}: VBR compression with target bitrate: {target_bitrate}kbps")
+                    compression_params = compression['params'](target_bitrate)
+                else:
+                    logger.info(f"Attempt {attempt_num}: Using {compression['strategy']} strategy")
+                    compression_params = compression['params'](None)
+                
+                # Use FFmpeg for compression
+                compress_cmd = [
+                    'ffmpeg',
+                    '-y',  # Overwrite output file if exists
+                    '-i', str(input_path)
+                ] + compression_params + [str(output_path)]
+                
+                subprocess.run(compress_cmd, check=True, capture_output=True)
+                
+                # Verify the output size
+                new_size = output_path.stat().st_size / (1024 * 1024)
+                logger.info(f"Compressed file size: {new_size:.2f}MB")
+                
+                if new_size <= max_size_mb:
+                    logger.info(f"Successfully compressed file below target size on attempt {attempt_num}")
+                    return output_path
+                else:
+                    logger.warning(f"Attempt {attempt_num} failed to reach target size, trying next strategy...")
+                    
+            except Exception as e:
+                logger.error(f"Compression attempt {attempt_num} failed: {e}")
+                if attempt_num == len(compression_attempts):
+                    raise
+                continue
+        
+        raise Exception(f"Failed to compress file below {max_size_mb}MB after all attempts")
+        
+    except Exception as e:
+        logger.error(f"Failed to compress audio: {e}")
+        # Clean up failed output file if it exists
+        if output_path.exists():
+            try:
+                os.unlink(output_path)
+            except:
+                pass
+        raise
+
+def speed_up_audio(input_path: Path, speed_factor: float = 2.0) -> Path:
+    """
+    Speed up audio file by the specified factor using FFmpeg
+    Returns path to sped-up audio file
+    
+    Args:
+        input_path: Path to input audio file
+        speed_factor: Speed multiplication factor (2.0 = double speed)
+        
+    Returns:
+        Path to sped-up audio file
+    """
+    output_path = input_path.parent / f"{input_path.stem}_x{speed_factor}{input_path.suffix}"
+    
+    try:
+        # Check if speed factor is within FFmpeg's atempo range
+        if speed_factor < 0.5 or speed_factor > 2.0:
+            raise ValueError(f"Speed factor must be between 0.5 and 2.0, got {speed_factor}")
+            
+        logger.info(f"Speeding up audio by {speed_factor}x")
+        
+        # Use FFmpeg to speed up audio
+        speed_cmd = [
             'ffmpeg',
             '-y',  # Overwrite output file if exists
             '-i', str(input_path),
-            '-b:a', f'{target_bitrate}k',
-            '-acodec', 'libmp3lame',
+            '-filter:a', f'atempo={speed_factor}',
+            '-vn',  # No video
             str(output_path)
         ]
         
-        subprocess.run(compress_cmd, check=True, capture_output=True)
+        result = subprocess.run(speed_cmd, capture_output=True, text=True)
         
-        # Verify the output size
+        if result.returncode != 0:
+            raise Exception(f"FFmpeg error: {result.stderr}")
+            
+        # Verify output exists
+        if not output_path.exists():
+            raise Exception("Output file was not created")
+            
+        original_size = input_path.stat().st_size / (1024 * 1024)
         new_size = output_path.stat().st_size / (1024 * 1024)
-        logger.info(f"Successfully compressed file to {new_size:.2f}MB")
-        
-        if new_size > max_size_mb:
-            raise Exception(f"Failed to compress file below {max_size_mb}MB (got {new_size:.2f}MB)")
+        logger.info(f"Created sped-up audio: {output_path.name} ({new_size:.2f}MB from {original_size:.2f}MB)")
         
         return output_path
         
     except Exception as e:
-        logger.error(f"Failed to compress audio: {e}")
+        logger.error(f"Failed to speed up audio: {e}")
         # Clean up failed output file if it exists
         if output_path.exists():
             try:

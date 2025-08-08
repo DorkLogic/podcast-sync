@@ -82,7 +82,8 @@ def generate_questions(client: OpenAI, conversation_text: str, output_path: Path
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.5
+            temperature=0.5,
+            timeout=300  # 5 minute timeout
         )
 
         questions_and_answers = response.choices[0].message.content.strip()
@@ -111,11 +112,44 @@ def transcribe_audio_file(client: OpenAI, file_path: str, config: dict) -> str:
         
         logger.info("No existing transcript found, transcribing with OpenAI...")
         
+        # Check if audio speedup is enabled in config
+        speed_up_enabled = config.get('transcription', {}).get('speed_up_audio', True)
+        speed_factor = config.get('transcription', {}).get('speed_factor', 2.0)
+        
+        actual_file_path = file_path
+        temp_file_to_cleanup = None
+        
+        if speed_up_enabled:
+            try:
+                from media.audio_processor import speed_up_audio
+                original_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
+                logger.info(f"Speeding up audio by {speed_factor}x to reduce transcription costs...")
+                logger.info(f"Original file size: {original_size_mb:.2f}MB")
+                
+                sped_up_path = speed_up_audio(Path(file_path), speed_factor)
+                sped_up_size_mb = sped_up_path.stat().st_size / (1024 * 1024)
+                savings_percent = ((original_size_mb - sped_up_size_mb) / original_size_mb) * 100
+                
+                logger.info(f"Speed-up optimization: {original_size_mb:.2f}MB → {sped_up_size_mb:.2f}MB ({savings_percent:.1f}% reduction)")
+                logger.info(f"Estimated cost savings: ~{savings_percent:.1f}% (duration reduced by {speed_factor}x)")
+                
+                actual_file_path = str(sped_up_path)
+                temp_file_to_cleanup = sped_up_path
+                
+                # Check if we're still over the limit
+                if sped_up_size_mb > 25:
+                    logger.warning(f"Sped-up file ({sped_up_size_mb:.2f}MB) still exceeds 25MB limit - very long episode!")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to speed up audio, using original: {e}")
+                # Continue with original file if speedup fails
+        
         # Get new transcript from OpenAI
-        with open(file_path, "rb") as audio_file:
+        with open(actual_file_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
                 model="whisper-1",
-                file=audio_file
+                file=audio_file,
+                timeout=1800  # 30 minute timeout for audio transcription
             )
             
         # Format transcript into conversational style using config
@@ -127,10 +161,24 @@ def transcribe_audio_file(client: OpenAI, file_path: str, config: dict) -> str:
             
         logger.info(f"Saved new Markdown transcript to {transcript_path}")
         
+        # Clean up temporary sped-up file if it was created
+        if temp_file_to_cleanup and temp_file_to_cleanup.exists():
+            try:
+                temp_file_to_cleanup.unlink()
+                logger.info(f"Cleaned up temporary sped-up audio file")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary file: {e}")
+        
         return formatted_transcript
         
     except Exception as e:
         logger.error(f"Error transcribing audio: {e}")
+        # Clean up temporary file on error
+        if 'temp_file_to_cleanup' in locals() and temp_file_to_cleanup and temp_file_to_cleanup.exists():
+            try:
+                temp_file_to_cleanup.unlink()
+            except:
+                pass
         raise
 
 def main():
@@ -138,7 +186,11 @@ def main():
     try:
         # Load config and initialize OpenAI client
         config = load_config()
-        client = OpenAI(api_key=config['openai']['api_key'])
+        client = OpenAI(
+            api_key=config['openai']['api_key'],
+            timeout=60.0,  # Default 60 second timeout
+            max_retries=2  # Retry failed requests up to 2 times
+        )
         
         # Setup paths
         audio_dir = ROOT_DIR / 'debug' / 'audio'
